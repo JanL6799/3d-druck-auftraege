@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D-Druck Auftragserfassung</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --panel:#fff; --panel2:#fbfbfd; --line:#d2d2d7; --line-soft:#e8e8ed;
+    --text:#1d1d1f; --muted:#6e6e73; --accent:#0071e3; --accent-soft:#e8f1fd;
+    --warn:#bf4800; --warn-bg:#fff4ec; --warn-line:#f5d9c4;
+    --r:18px; --shadow:0 1px 3px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.06);
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#000; --panel:#1d1d1f; --panel2:#242426; --line:#3a3a3c; --line-soft:#2c2c2e;
+      --text:#f5f5f7; --muted:#98989d; --accent:#2997ff; --accent-soft:#12263c;
+      --warn:#ff9f45; --warn-bg:#2b1d10; --warn-line:#4a3520;
+      --shadow:0 1px 3px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{-webkit-font-smoothing:antialiased}
+  body{margin:0;background:var(--bg);color:var(--text);font:17px/1.47 var(--font);
+       letter-spacing:-.01em}
+
+  /* Kopfzeile im Stil der Apple-Navigationsleiste */
+  header{position:sticky;top:0;z-index:50;height:52px;display:flex;align-items:center;gap:16px;
+         padding:0 22px;background:rgba(251,251,253,.72);backdrop-filter:saturate(180%) blur(20px);
+         -webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line-soft)}
+  @media (prefers-color-scheme: dark){ header{background:rgba(29,29,31,.72)} }
+  header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:-.02em;white-space:nowrap}
+  header .sp{flex:1}
+  .chip{font-size:12px;font-weight:500;padding:4px 11px;border-radius:100px;background:var(--accent-soft);
+        color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:38vw}
+  /* Schmale Schirme: Leiste bricht auf zwei Reihen um, sonst rutschen die Knöpfe aus dem Bild */
+  @media (max-width:760px){
+    header{height:auto;min-height:52px;flex-wrap:wrap;padding:8px 16px;gap:8px}
+    header h1{font-size:15px;flex:none}
+    header .sp{flex-basis:100%;height:0;order:1}
+    .chip{max-width:34vw}
+    header .stack{order:2;width:100%;justify-content:flex-end;gap:7px}
+  }
+  @media (max-width:400px){
+    header h1{font-size:14px}
+    header .stack button{font-size:13px;padding:7px 12px}
+  }
+  /* Kurzbeschriftung, damit die drei Knöpfe in eine Reihe passen */
+  .narrow{display:none}
+  @media (max-width:760px){ .wide{display:none} .narrow{display:inline} }
+
+  .hero{text-align:center;padding:56px 20px 12px}
+  .hero h2{font-size:44px;line-height:1.08;font-weight:650;letter-spacing:-.03em;margin:0 0 10px}
+  .hero p{font-size:19px;color:var(--muted);margin:0;letter-spacing:-.015em}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px;
+        display:grid;grid-template-columns:1fr 372px;gap:22px;align-items:start}
+  @media(max-width:940px){ .wrap{grid-template-columns:1fr} .hero h2{font-size:34px} }
+
+  .card{background:var(--panel);border-radius:var(--r);padding:26px;margin-bottom:22px;box-shadow:var(--shadow)}
+  .card h3{font-size:21px;font-weight:600;letter-spacing:-.02em;margin:0 0 3px}
+  .card .sub{font-size:14px;color:var(--muted);margin:0 0 20px}
+
+  label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:16px 0 6px;
+        letter-spacing:0}
+  input,select,textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:12px;
+        background:var(--panel2);color:var(--text);font:inherit;font-size:15px;transition:.15s;
+        letter-spacing:-.01em}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
+        box-shadow:0 0 0 4px var(--accent-soft)}
+  textarea{resize:vertical;min-height:76px}
+  select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e6e73' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+         background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+
+  button{font:inherit;font-size:15px;font-weight:500;padding:9px 17px;border-radius:100px;
+         border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;
+         transition:.15s;letter-spacing:-.01em;white-space:nowrap}
+  button:hover{background:var(--bg)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  button.sm{font-size:13px;padding:6px 13px}
+  button.link{border:none;background:none;color:var(--accent);padding:4px 0;font-size:14px}
+  button.link:hover{background:none;text-decoration:underline}
+  .stack{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+
+  /* Regler im Apple-Look */
+  input[type=range]{-webkit-appearance:none;appearance:none;background:none;border:none;padding:0;
+        height:26px;box-shadow:none}
+  input[type=range]:focus{box-shadow:none}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-9px;cursor:grab}
+  input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.06)}
+  .sliderhead{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}
+  .sliderhead span:first-child{font-size:12px;font-weight:500;color:var(--muted)}
+  .sliderhead span:last-child{font-size:15px;font-weight:550;font-variant-numeric:tabular-nums}
+
+  /* Schalter */
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:2px 0}
+  .switch .t{font-size:15px;font-weight:450}
+  .tog{position:relative;width:51px;height:31px;border-radius:100px;background:var(--line);
+       border:none;padding:0;cursor:pointer;transition:.22s;flex:none}
+  .tog:hover{background:var(--line)}
+  .tog::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;
+       background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.22);transition:.22s}
+  .tog.on{background:#30d158}
+  .tog.on::after{transform:translateX(20px)}
+
+  /* Ablagefläche + Vorschau */
+  #drop{border:1.5px dashed var(--line);border-radius:14px;padding:52px 20px;text-align:center;
+        cursor:pointer;transition:.18s;background:var(--panel2)}
+  #drop:hover,#drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  #drop .big{font-size:17px;font-weight:550;letter-spacing:-.02em;display:block;margin-bottom:5px}
+  #drop .sm2{font-size:13px;color:var(--muted)}
+  #drop svg{margin-bottom:12px;opacity:.5}
+  #viewerBox{position:relative;display:none}
+  canvas{width:100%;height:400px;display:block;border-radius:14px;cursor:grab;touch-action:none;
+         background:radial-gradient(120% 120% at 50% 0%,#fdfdfd 0%,#e6e8ec 100%)}
+  @media (prefers-color-scheme: dark){
+    canvas{background:radial-gradient(120% 120% at 50% 0%,#2c2c2e 0%,#161618 100%)}
+  }
+  canvas:active{cursor:grabbing}
+  .vtools{position:absolute;top:11px;right:11px;display:flex;gap:7px}
+  .vtools button{padding:5px 12px;font-size:13px;background:rgba(255,255,255,.75);
+        backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:transparent}
+  @media (prefers-color-scheme: dark){ .vtools button{background:rgba(50,50,54,.75)} }
+  .hint{font-size:12px;color:var(--muted);margin-top:10px;text-align:center}
+
+  /* Farben */
+  .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:9px;margin-top:8px}
+  .sw{aspect-ratio:1;border-radius:50%;border:1px solid rgba(0,0,0,.12);cursor:pointer;transition:.13s;
+      position:relative}
+  .sw:hover{transform:scale(1.14)}
+  .sw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
+  .sw.on::after{content:"";position:absolute;inset:0;border-radius:50%}
+  .colorname{margin-top:12px;font-size:14px}
+  .colorname b{font-weight:550}
+  .addcolor{display:grid;grid-template-columns:46px 1fr auto;gap:9px;align-items:center;margin-top:14px}
+  .addcolor input[type=color]{padding:2px;height:38px;cursor:pointer;background:var(--panel2)}
+
+  /* Materialtabelle */
+  .mtable{margin-top:8px;border:1px solid var(--line-soft);border-radius:12px;overflow:hidden}
+  .mhead,.mrow{display:grid;grid-template-columns:1fr 76px 74px 68px 32px;gap:8px;align-items:center;
+        padding:8px 10px}
+  .mhead{background:var(--panel2);border-bottom:1px solid var(--line-soft);font-size:11px;
+        color:var(--muted);font-weight:500}
+  .mhead div:not(:first-child){text-align:center}
+  .mrow{border-bottom:1px solid var(--line-soft)}
+  .mrow:last-child{border-bottom:none}
+  .mrow.active{background:var(--accent-soft)}
+  .mrow input{padding:7px 8px;font-size:14px;border-radius:8px}
+  .mrow input.n{text-align:center;font-variant-numeric:tabular-nums}
+  .del{border:none;background:none;color:var(--muted);font-size:19px;line-height:1;padding:2px 6px;
+       border-radius:7px;cursor:pointer}
+  .del:hover{background:var(--warn-bg);color:#d70015}
+
+  /* Kalkulation */
+  table.calc{width:100%;border-collapse:collapse;font-size:15px}
+  table.calc td{padding:8px 0;border-bottom:1px solid var(--line-soft)}
+  table.calc td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  table.calc tr.sec td{padding-top:16px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+        color:var(--muted);border-bottom:none;font-weight:600}
+  table.calc tr.total td{border:none;padding-top:16px;font-size:32px;font-weight:650;letter-spacing:-.03em}
+  table.calc tr.total td:first-child{font-size:15px;font-weight:450;color:var(--muted);vertical-align:bottom;
+        padding-bottom:6px}
+  .warnbox{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;font-size:14px;
+           background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+  .warnbox.show{display:block}
+  .foot{font-size:12px;color:var(--muted);text-align:center;padding:0 0 40px}
+
+  /* Druckansicht */
+  #print{display:none}
+  @media print{
+    body>*{display:none!important}
+    #print{display:block!important;color:#000;font:12px/1.45 var(--font)}
+    @page{size:A4;margin:17mm}
+    #print h1{font-size:21px;margin:0 0 2px;letter-spacing:-.02em}
+    #print .meta{color:#666;font-size:11px;margin-bottom:16px}
+    #print h4{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#666;
+              border-bottom:1px solid #ddd;padding-bottom:4px;margin:15px 0 7px}
+    #print table{width:100%;border-collapse:collapse}
+    #print td{padding:3px 0;border-bottom:1px solid #f0f0f0}
+    #print td:last-child{text-align:right}
+    #print .tot{font-size:17px;font-weight:700;border-top:2px solid #000;padding-top:7px;margin-top:4px}
+    #print .shot{width:100%;max-width:62mm;border:1px solid #ddd;border-radius:5px}
+    #print .cols{display:flex;gap:22px;align-items:flex-start}
+    #print .cols>div{flex:1}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>3D-Druck Auftragserfassung</h1>
+  <span class="chip" id="stateBadge">Kein Modell</span>
+  <span class="sp"></span>
+  <div class="stack">
+    <button id="btnSave" class="sm"><span class="wide">Stand speichern</span><span class="narrow">Speichern</span></button>
+    <button id="btnLoad" class="sm"><span class="wide">Stand laden</span><span class="narrow">Laden</span></button>
+    <button id="btnPdf" class="primary sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
+  </div>
+</header>
+
+<div class="hero">
+  <h2>Vom Modell zum Angebot.</h2>
+  <p>Datei laden, Material wählen, Preis erhalten.</p>
+</div>
+
+<div class="wrap">
+  <!-- LINKS -->
+  <div>
+    <div class="card">
+      <h3>Modelldatei</h3>
+      <p class="sub">STL — das Format, das jeder FDM-Slicer direkt verarbeitet.</p>
+      <div id="drop">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v13m0-13l-4.5 4.5M12 3l4.5 4.5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>
+        </svg>
+        <span class="big">STL-Datei ablegen oder auswählen</span>
+        <span class="sm2">Binär und ASCII · wird lokal verarbeitet, nichts wird hochgeladen</span>
+      </div>
+      <input type="file" id="file" accept=".stl" hidden>
+      <div id="viewerBox">
+        <canvas id="cv"></canvas>
+        <div class="vtools">
+          <button id="btnRot">Drehen: an</button>
+          <button id="btnFit">Zentrieren</button>
+          <button id="btnClear">Entfernen</button>
+        </div>
+        <div class="hint">Ziehen zum Drehen · Mausrad zum Zoomen</div>
+      </div>
+      <div class="warnbox" id="warn"></div>
+    </div>
+
+    <div class="card">
+      <h3>Auftragsdaten</h3>
+      <p class="sub">Woher die Bestellung kommt und für wen sie ist.</p>
+      <div class="row">
+        <div>
+          <label for="platform">Plattform</label>
+          <select id="platform">
+            <option>eBay</option><option>Etsy</option><option>Amazon</option>
+            <option>Direktanfrage</option><option>Sonstige</option>
+          </select>
+        </div>
+        <div><label for="orderId">Bestellnummer</label><input id="orderId" placeholder="z. B. 14-13454-98123"></div>
+      </div>
+      <div class="row">
+        <div><label for="buyer">Käufer</label><input id="buyer" placeholder="Name / Nutzername"></div>
+        <div><label for="due">Liefern bis</label><input id="due" type="date"></div>
+      </div>
+      <label for="notes">Notizen</label>
+      <textarea id="notes" placeholder="Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
+    </div>
+
+    <div class="card">
+      <h3>Druckeinstellungen</h3>
+      <p class="sub">Bestimmen Materialbedarf, Druckzeit und damit den Preis.</p>
+      <div class="row">
+        <div>
+          <div class="sliderhead"><span>Füllung (Infill)</span><span id="lInfill">20 %</span></div>
+          <input type="range" id="infill" min="0" max="100" step="5" value="20">
+        </div>
+        <div>
+          <div class="sliderhead"><span>Schichthöhe</span><span id="lLayer">0,20 mm</span></div>
+          <input type="range" id="layer" min="0.08" max="0.32" step="0.04" value="0.2">
+        </div>
+      </div>
+      <div class="row3">
+        <div>
+          <label for="walls">Wandstärke</label>
+          <select id="walls">
+            <option value="2">2 Linien · 0,8 mm</option>
+            <option value="3" selected>3 Linien · 1,2 mm</option>
+            <option value="4">4 Linien · 1,6 mm</option>
+            <option value="5">5 Linien · 2,0 mm</option>
+          </select>
+        </div>
+        <div><label for="qty">Stückzahl</label><input id="qty" type="number" min="1" step="1" value="1"></div>
+        <div><label for="scale">Skalierung %</label><input id="scale" type="number" min="10" max="500" step="1" value="100"></div>
+      </div>
+
+      <label style="margin-bottom:10px">Stützstruktur</label>
+      <div class="switch">
+        <span class="t">Stützen mitdrucken</span>
+        <button class="tog" id="support" aria-pressed="false"></button>
+      </div>
+      <div id="supBox" style="display:none">
+        <div class="sliderhead"><span>Materialaufschlag durch Stützen</span><span id="lSup">15 %</span></div>
+        <input type="range" id="supPct" min="0" max="100" step="1" value="15">
+        <p class="hint" style="text-align:left;margin-top:2px">
+          Wie viel Material die Stützen zusätzlich kosten — bei einer kleinen Brücke 5 %, bei einer
+          frei stehenden Figur auch 60 %.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECHTS -->
+  <div>
+    <div class="card">
+      <h3>Material</h3>
+      <p class="sub">Deine Filamente, deine Preise. Alles direkt editierbar.</p>
+      <label for="material">Aktives Material</label>
+      <select id="material"></select>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px">
+        <label style="margin:0">Materialliste</label>
+        <button class="link" id="btnMat">Bearbeiten</button>
+      </div>
+      <div id="matBox" style="display:none">
+        <div class="mtable">
+          <div class="mhead"><div>Name</div><div>€/kg</div><div>g/cm³</div><div>Tempo</div><div></div></div>
+          <div id="matRows"></div>
+        </div>
+        <div class="stack" style="margin-top:12px">
+          <button class="sm" id="btnMatAdd">+ Material</button>
+          <button class="sm" id="btnMatReset">Zurücksetzen</button>
+        </div>
+        <p class="hint" style="text-align:left">
+          <b>Tempo</b> ist der Geschwindigkeitsfaktor gegenüber PLA (1,0). TPU druckt etwa halb so
+          schnell, also 0,45.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Farbe</h3>
+      <p class="sub">Palette oder eigene Farbe anlegen.</p>
+      <div class="swatches" id="swatches"></div>
+      <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
+      <label>Eigene Farbe hinzufügen</label>
+      <div class="addcolor">
+        <input type="color" id="newHex" value="#e8b923">
+        <input id="newName" placeholder="Name, z. B. Senfgelb">
+        <button class="sm" id="btnColAdd">Anlegen</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Kalkulation</h3>
+      <p class="sub">Live aus Modell, Material und Einstellungen.</p>
+      <table class="calc">
+        <tr class="sec"><td colspan="2">Modell</td></tr>
+        <tr><td>Volumen (netto)</td><td id="rVol">–</td></tr>
+        <tr><td>Materialbedarf</td><td id="rMass">–</td></tr>
+        <tr><td>Druckzeit</td><td id="rTime">–</td></tr>
+        <tr><td>Abmessungen</td><td id="rDim">–</td></tr>
+        <tr class="sec"><td colspan="2">Kosten</td></tr>
+        <tr><td>Material</td><td id="rMat">–</td></tr>
+        <tr><td id="lElec">Strom</td><td id="rElec">–</td></tr>
+        <tr><td>Maschinenzeit</td><td id="rMach">–</td></tr>
+        <tr><td>Rüsten &amp; Nacharbeit</td><td id="rSetup">–</td></tr>
+        <tr><td id="lPlat">Plattformgebühr</td><td id="rPlat">–</td></tr>
+        <tr class="total"><td>Preis brutto</td><td id="rTotal">–</td></tr>
+      </table>
+      <div class="hint" id="rPer" style="text-align:right"></div>
+    </div>
+
+    <div class="card">
+      <h3>Kalkulationsbasis</h3>
+      <p class="sub">Deine Betriebskosten.</p>
+      <div class="row">
+        <div><label for="pWatt">Drucker-Leistung W</label><input id="pWatt" type="number" step="5" min="0" value="120"></div>
+        <div><label for="pKwh">Strompreis €/kWh</label><input id="pKwh" type="number" step="0.01" min="0" value="0.25"></div>
+      </div>
+      <div class="row">
+        <div><label for="pMachine">Maschine €/h</label><input id="pMachine" type="number" step="0.5" min="0" value="2.5"></div>
+        <div><label for="pSetup">Rüsten €</label><input id="pSetup" type="number" step="0.5" min="0" value="3"></div>
+      </div>
+      <div class="row">
+        <div><label for="pMargin">Marge %</label><input id="pMargin" type="number" step="5" value="40"></div>
+        <div><label for="pVat">MwSt. %</label><input id="pVat" type="number" step="1" min="0" value="19"></div>
+      </div>
+      <p class="hint" style="text-align:left">
+        Strom wird getrennt gerechnet: Leistung × Druckzeit × Preis. In „Maschine €/h“ gehören
+        Abschreibung, Düsen und Wartung — ohne Strom, sonst zählst du ihn doppelt.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="foot">Alles läuft lokal im Browser · keine Datei verlässt deinen Rechner</div>
+<div id="print"></div>
+
+<script>
+"use strict";
+
+/* ---------- Stammdaten ---------- */
+const DEFAULT_MATERIALS = [
+  {name:"PLA",        price:22, dens:1.24, speed:1.00},
+  {name:"PETG",       price:26, dens:1.27, speed:0.85},
+  {name:"ABS",        price:24, dens:1.04, speed:0.85},
+  {name:"ASA",        price:32, dens:1.07, speed:0.80},
+  {name:"TPU 95A",    price:38, dens:1.21, speed:0.45},
+  {name:"Nylon PA12", price:55, dens:1.01, speed:0.70},
+  {name:"PLA Holz",   price:34, dens:1.15, speed:0.85},
+  {name:"PLA Silk",   price:28, dens:1.24, speed:0.95},
+  {name:"PLA-CF",     price:45, dens:1.22, speed:0.85},
+  {name:"PETG-CF",    price:52, dens:1.30, speed:0.80}
+];
+
+const PALETTE = [
+  ["Schwarz","#1a1a1a"],["Anthrazit","#33383d"],["Dunkelgrau","#4f545c"],["Grau","#808080"],
+  ["Silber","#b8bcc2"],["Hellgrau","#d5d7db"],["Weiß","#f7f7f7"],["Naturweiß","#f1ece1"],
+  ["Elfenbein","#e8e0cc"],["Beige","#d9c8a9"],["Sand","#e3d2ac"],["Khaki","#9a8f6b"],
+  ["Bordeaux","#6d1b2f"],["Dunkelrot","#8e1c1c"],["Rot","#d32f2f"],["Feuerrot","#e94141"],
+  ["Signalrot","#ff2d2d"],["Koralle","#ff6f61"],["Rosa","#f48fb1"],["Pink","#ff4d94"],
+  ["Magenta","#c2185b"],["Purpur","#7b1fa2"],["Violett","#9575cd"],["Flieder","#c3aede"],
+  ["Dunkelblau","#0d3c78"],["Marine","#16264a"],["Blau","#1565c0"],["Himmelblau","#2f9ae8"],
+  ["Hellblau","#6ecbf5"],["Babyblau","#a8dcf0"],["Petrol","#00697a"],["Türkis","#00acc1"],
+  ["Mint","#5fcdb0"],["Dunkelgrün","#1b5e20"],["Grün","#2e7d32"],["Grasgrün","#4caf50"],
+  ["Hellgrün","#8bc34a"],["Limette","#c0ea52"],["Neongrün","#b2ff59"],["Oliv","#6b7a2f"],
+  ["Gelb","#fdd835"],["Zitrone","#f7ea5a"],["Bernstein","#ffb300"],["Orange","#f57c00"],
+  ["Signalorange","#ff6f00"],["Braun","#6d4c41"],["Holz","#a1785a"],["Schokolade","#4e342e"],
+  ["Gold","#d4af37"],["Messing","#b5a642"],["Kupfer","#b87333"],["Bronze","#8c7853"],
+  ["Transparent","#dfeef2"],["Milchig","#eceff0"],["Glow Grün","#c8f5b0"],["Galaxy","#2a2545"]
+];
+
+const PLATFORM_FEE = { "eBay":0.11, "Etsy":0.095, "Amazon":0.15, "Direktanfrage":0, "Sonstige":0 };
+const NOZZLE = 0.4, FLOW = 8.0;
+const STORE_KEY = "druckauftrag.v2";
+
+/* ---------- Zustand ---------- */
+let mesh = null;
+let materials = DEFAULT_MATERIALS.map(m => ({...m}));
+let matIdx = 0;
+let customColors = [];
+let color = {n:PALETTE[0][0], c:PALETTE[0][1]};
+let spin = true, rotX = -1.05, rotY = 0.6, zoom = 1, drag = null;
+
+const $ = id => document.getElementById(id);
+const eur = n => n.toLocaleString("de-DE",{style:"currency",currency:"EUR"});
+const num = (n,d=1) => n.toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
+const esc = s => String(s).replace(/[<>&"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+const allColors = () => PALETTE.map(([n,c])=>({n,c})).concat(customColors);
+
+/* ---------- STL-Parser ---------- */
+function parseSTL(buf){
+  const dv = new DataView(buf);
+  const isAscii = (() => {
+    if (buf.byteLength < 84) return true;
+    if (84 + dv.getUint32(80,true)*50 === buf.byteLength) return false;
+    const head = new TextDecoder().decode(new Uint8Array(buf,0,Math.min(512,buf.byteLength)));
+    return /^\s*solid/.test(head) && /facet|endsolid/.test(head);
+  })();
+
+  const out = [];
+  if (isAscii){
+    const txt = new TextDecoder().decode(buf);
+    const re = /vertex\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)/g;
+    let m; while ((m = re.exec(txt))) out.push(+m[1],+m[2],+m[3]);
+  } else {
+    const n = dv.getUint32(80,true);
+    if (84 + n*50 > buf.byteLength) throw new Error("Datei ist unvollständig oder beschädigt.");
+    let o = 84;
+    for (let i=0;i<n;i++){
+      o += 12;
+      for (let v=0;v<3;v++,o+=12)
+        out.push(dv.getFloat32(o,true),dv.getFloat32(o+4,true),dv.getFloat32(o+8,true));
+      o += 2;
+    }
+  }
+  if (out.length < 9) throw new Error("Keine Dreiecke gefunden — ist das eine gültige STL-Datei?");
+  return new Float32Array(out);
+}
+
+function analyse(tris){
+  let vol=0, area=0;
+  const mn=[ 1e30, 1e30, 1e30], mx=[-1e30,-1e30,-1e30];
+  for (let i=0;i<tris.length;i+=9){
+    const ax=tris[i],ay=tris[i+1],az=tris[i+2],
+          bx=tris[i+3],by=tris[i+4],bz=tris[i+5],
+          cx=tris[i+6],cy=tris[i+7],cz=tris[i+8];
+    vol += (ax*(by*cz-bz*cy) - ay*(bx*cz-bz*cx) + az*(bx*cy-by*cx))/6;
+    const ux=bx-ax,uy=by-ay,uz=bz-az, vx=cx-ax,vy=cy-ay,vz=cz-az;
+    area += Math.hypot(uy*vz-uz*vy, uz*vx-ux*vz, ux*vy-uy*vx)/2;
+    for (let k=0;k<3;k++){
+      const p=[tris[i+k*3],tris[i+k*3+1],tris[i+k*3+2]];
+      for (let a=0;a<3;a++){ if(p[a]<mn[a])mn[a]=p[a]; if(p[a]>mx[a])mx[a]=p[a]; }
+    }
+  }
+  return { vol:Math.abs(vol), area, mn, mx,
+           size:[mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2]], tricount:tris.length/9 };
+}
+
+/* ---------- Kalkulation ---------- */
+function calc(){
+  if (!mesh) return null;
+  const mat = materials[matIdx];
+  if (!mat) return null;
+  const s = (+$("scale").value||100)/100;
+  const infill = +$("infill").value/100;
+  const layer  = +$("layer").value;
+  const walls  = +$("walls").value;
+  const qty    = Math.max(1, +$("qty").value||1);
+  const supOn  = $("support").classList.contains("on");
+  const supPct = supOn ? +$("supPct").value/100 : 0;
+
+  const vol  = mesh.vol  * s**3;
+  const area = mesh.area * s**2;
+  const size = mesh.size.map(v => v*s);
+
+  const shell = Math.min(vol, area * walls * NOZZLE);
+  let solid = shell + (vol - shell) * infill;
+  solid *= (1 + supPct);
+
+  const dens  = +mat.dens  || 1.24;
+  const speed = +mat.speed || 1;
+  const grams = solid * dens / 1000;
+  const hours = (solid / (FLOW * speed * (layer/0.2))) / 3600 * 1.25;
+
+  const cMat  = grams/1000 * (+mat.price||0);
+  const cElec = (+$("pWatt").value||0)/1000 * hours * (+$("pKwh").value||0);
+  const cMach = hours * (+$("pMachine").value||0);
+  const cSet  = +$("pSetup").value||0;
+  const net1  = (cMat + cElec + cMach) * (1 + (+$("pMargin").value||0)/100) + cSet;
+
+  const feeRate = PLATFORM_FEE[$("platform").value] ?? 0;
+  const netQty  = net1 * qty;
+  const withFee = feeRate < 1 ? netQty/(1-feeRate) : netQty;
+  const fee     = withFee - netQty;
+  const vat     = +$("pVat").value||0;
+  const gross   = withFee * (1 + vat/100);
+
+  return {vol,grams,hours,size,cMat:cMat*qty,cElec:cElec*qty,cMach:cMach*qty,cSet:cSet*qty,
+          fee,gross,qty,feeRate,vat,mat,infill,layer,walls,supOn,supPct};
+}
+
+function render(){
+  const r = calc();
+  const set = (id,v) => $(id).textContent = v;
+  const ids = ["rVol","rMass","rTime","rDim","rMat","rElec","rMach","rSetup","rPlat","rTotal"];
+  if (!r){ ids.forEach(i=>set(i,"–")); $("rPer").textContent=""; return; }
+
+  const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
+  const per = r.qty>1 ? " × "+r.qty : "";
+  set("rVol",  num(r.vol/1000,1)+" cm³");
+  set("rMass", num(r.grams,1)+" g"+per);
+  set("rTime", (h?h+" h ":"")+m+" min"+per);
+  set("rDim",  r.size.map(v=>num(v,0)).join(" × ")+" mm");
+  set("rMat",  eur(r.cMat));
+  set("lElec", "Strom ("+num((+$("pWatt").value||0),0)+" W · "+num(+$("pKwh").value||0,2)+" €/kWh)");
+  set("rElec", eur(r.cElec));
+  set("rMach", eur(r.cMach));
+  set("rSetup",eur(r.cSet));
+  set("lPlat", "Plattformgebühr"+(r.feeRate?" ("+num(r.feeRate*100,1)+" %)":""));
+  set("rPlat", r.feeRate ? eur(r.fee) : "–");
+  set("rTotal",eur(r.gross));
+  $("rPer").textContent = (r.qty>1 ? eur(r.gross/r.qty)+" pro Stück · " : "")
+                        + "inkl. "+num(r.vat,0)+" % MwSt.";
+
+  const over = r.size.some(v => v > 256);
+  const w = $("warn");
+  w.className = "warnbox" + (over ? " show" : "");
+  if (over) w.textContent = "Das Teil überschreitet mit "+r.size.map(v=>num(v,0)).join(" × ")
+    +" mm den Bauraum von 256 × 256 × 256 mm. Skalierung reduzieren oder Teil zerlegen.";
+}
+
+/* ---------- 3D-Vorschau ---------- */
+const cv = $("cv"), ctx = cv.getContext("2d");
+let view = null;
+
+function buildView(){
+  const {mn,mx,size} = mesh;
+  const c = [ (mn[0]+mx[0])/2, (mn[1]+mx[1])/2, (mn[2]+mx[2])/2 ];
+  const k = 1 / Math.max(...size, 1e-6);
+  const t = new Float32Array(mesh.tris.length);
+  for (let i=0;i<t.length;i+=3){
+    t[i]   = (mesh.tris[i]  -c[0])*k;
+    t[i+1] = (mesh.tris[i+1]-c[1])*k;
+    t[i+2] = (mesh.tris[i+2]-c[2])*k;
+  }
+  view = t;
+}
+
+const hex2rgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+
+function draw(){
+  const dpr = Math.min(devicePixelRatio||1, 2);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W*dpr)){ cv.width = W*dpr; cv.height = H*dpr; }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  if (!view) return;
+
+  const cy=Math.cos(rotY), sy=Math.sin(rotY), cx=Math.cos(rotX), sx=Math.sin(rotX);
+  const S = Math.min(W,H) * 0.62 * zoom, ox = W/2, oy = H/2;
+  const n = view.length/9;
+  const depth = new Float32Array(n), idx = new Uint32Array(n);
+  const px = new Float32Array(n*6), sh = new Float32Array(n);
+
+  for (let i=0;i<n;i++){
+    let dz=0; const p=[];
+    for (let v=0;v<3;v++){
+      const o=i*9+v*3;
+      const x=view[o], y=view[o+1], z=view[o+2];
+      const x1 =  x*cy + z*sy, z1 = -x*sy + z*cy;
+      const y1 =  y*cx - z1*sx, z2 =  y*sx + z1*cx;
+      p.push(ox + x1*S, oy - y1*S); dz += z2;
+    }
+    for (let k=0;k<6;k++) px[i*6+k] = p[k];
+    depth[i] = dz/3; idx[i] = i;
+    const ux=p[2]-p[0], uy=p[3]-p[1], vx=p[4]-p[0], vy=p[5]-p[1];
+    const len = Math.hypot(ux,uy) * Math.hypot(vx,vy) || 1;
+    sh[i] = 0.42 + 0.58 * Math.min(1, Math.abs(ux*vy - uy*vx)/len);
+  }
+
+  idx.sort((a,b) => depth[a]-depth[b]);
+  const [cr,cg,cb] = hex2rgb(color.c);
+  // Additiver Lichtanteil, sonst bleiben dunkle Filamente eine flache Silhouette
+  const lit = (c,l) => Math.min(255, c*(0.4+0.6*l) + 58*l) | 0;
+  for (let j=0;j<n;j++){
+    const i = idx[j], l = sh[i];
+    ctx.fillStyle = `rgb(${lit(cr,l)},${lit(cg,l)},${lit(cb,l)})`;
+    ctx.beginPath();
+    ctx.moveTo(px[i*6],px[i*6+1]);
+    ctx.lineTo(px[i*6+2],px[i*6+3]);
+    ctx.lineTo(px[i*6+4],px[i*6+5]);
+    ctx.closePath(); ctx.fill();
+  }
+}
+(function loop(){ if (spin && !drag && view) rotY += 0.006; draw(); requestAnimationFrame(loop); })();
+
+cv.addEventListener("pointerdown", e => { drag=[e.clientX,e.clientY]; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener("pointermove", e => {
+  if (!drag) return;
+  rotY += (e.clientX-drag[0])*0.01;
+  rotX  = Math.max(-1.55, Math.min(1.55, rotX + (e.clientY-drag[1])*0.01));
+  drag=[e.clientX,e.clientY];
+});
+addEventListener("pointerup", () => drag=null);
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  zoom = Math.max(0.3, Math.min(4, zoom * (e.deltaY<0 ? 1.1 : 0.9)));
+},{passive:false});
+
+/* ---------- Datei laden ---------- */
+async function loadFile(f){
+  if (!/\.stl$/i.test(f.name)){
+    const w=$("warn"); w.className="warnbox show";
+    w.textContent = "„"+f.name+"“ ist keine STL-Datei. Die Drucker verarbeiten nur STL — "
+      + "aus STEP, 3MF oder OBJ bitte vorher exportieren."; return;
+  }
+  try {
+    const tris = parseSTL(await f.arrayBuffer());
+    mesh = Object.assign({tris, name:f.name, bytes:f.size}, analyse(tris));
+    buildView(); rotX=-1.05; rotY=0.6; zoom=1;
+    $("drop").style.display="none"; $("viewerBox").style.display="block";
+    $("stateBadge").textContent = mesh.name+" · "+mesh.tricount.toLocaleString("de-DE")+" Dreiecke";
+    $("warn").className="warnbox";
+    render();
+  } catch(err){
+    const w=$("warn"); w.className="warnbox show"; w.textContent = "Fehler: "+err.message;
+  }
+}
+$("drop").onclick = () => $("file").click();
+$("file").onchange = e => e.target.files[0] && loadFile(e.target.files[0]);
+["dragenter","dragover"].forEach(t => $("drop").addEventListener(t, e=>{e.preventDefault();$("drop").classList.add("over");}));
+["dragleave","drop"].forEach(t => $("drop").addEventListener(t, e=>{e.preventDefault();$("drop").classList.remove("over");}));
+$("drop").addEventListener("drop", e => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
+$("btnRot").onclick   = () => { spin=!spin; $("btnRot").textContent = "Drehen: "+(spin?"an":"aus"); };
+$("btnFit").onclick   = () => { rotX=-1.05; rotY=0.6; zoom=1; };
+$("btnClear").onclick = () => {
+  mesh=null; view=null; $("file").value="";
+  $("drop").style.display="block"; $("viewerBox").style.display="none";
+  $("stateBadge").textContent="Kein Modell"; $("warn").className="warnbox"; render();
+};
+
+/* ---------- Material ---------- */
+function syncMatSelect(){
+  $("material").innerHTML = materials
+    .map((m,i) => `<option value="${i}"${i===matIdx?" selected":""}>${esc(m.name||"Ohne Namen")} — ${eur(+m.price||0)}/kg</option>`)
+    .join("");
+}
+
+function drawMatRows(){
+  $("matRows").innerHTML = materials.map((m,i) => `
+    <div class="mrow${i===matIdx?" active":""}" data-i="${i}">
+      <input data-k="name"  value="${esc(m.name)}" aria-label="Name">
+      <input data-k="price" class="n" type="number" step="0.5" min="0" value="${m.price}" aria-label="Preis">
+      <input data-k="dens"  class="n" type="number" step="0.01" min="0.1" value="${m.dens}" aria-label="Dichte">
+      <input data-k="speed" class="n" type="number" step="0.05" min="0.1" value="${m.speed}" aria-label="Tempo">
+      <button class="del" data-del="${i}" title="Löschen">&times;</button>
+    </div>`).join("");
+
+  $("matRows").querySelectorAll("input").forEach(inp => {
+    inp.oninput = () => {
+      const i = +inp.closest(".mrow").dataset.i, k = inp.dataset.k;
+      materials[i][k] = k === "name" ? inp.value : (+inp.value || 0);
+      syncMatSelect(); render();
+    };
+  });
+  $("matRows").querySelectorAll(".del").forEach(b => b.onclick = () => {
+    if (materials.length === 1){
+      const w=$("warn"); w.className="warnbox show";
+      w.textContent="Mindestens ein Material muss übrig bleiben."; return;
+    }
+    const i = +b.dataset.del;
+    materials.splice(i,1);
+    if (matIdx >= materials.length) matIdx = materials.length-1;
+    else if (matIdx > i) matIdx--;
+    syncMatSelect(); drawMatRows(); render();
+  });
+}
+
+$("material").onchange = e => { matIdx = +e.target.value; drawMatRows(); render(); };
+$("btnMat").onclick = () => {
+  const open = $("matBox").style.display === "block";
+  $("matBox").style.display = open ? "none" : "block";
+  $("btnMat").textContent = open ? "Bearbeiten" : "Fertig";
+};
+$("btnMatAdd").onclick = () => {
+  materials.push({name:"Neues Material", price:25, dens:1.24, speed:1});
+  matIdx = materials.length-1;
+  syncMatSelect(); drawMatRows(); render();
+  const last = $("matRows").lastElementChild.querySelector("input");
+  last.focus(); last.select();
+};
+$("btnMatReset").onclick = () => {
+  materials = DEFAULT_MATERIALS.map(m=>({...m})); matIdx = 0;
+  syncMatSelect(); drawMatRows(); render();
+};
+
+/* ---------- Farbe ---------- */
+function drawSwatches(){
+  $("swatches").innerHTML = allColors()
+    .map(o => `<div class="sw${o.c===color.c&&o.n===color.n?" on":""}" data-n="${esc(o.n)}" data-c="${o.c}"
+                    style="background:${o.c}" title="${esc(o.n)}"></div>`).join("");
+  $("swatches").querySelectorAll(".sw").forEach(el => el.onclick = () => {
+    color = {n:el.dataset.n, c:el.dataset.c}; drawSwatches();
+  });
+  $("cName").textContent = color.n;
+  $("cHex").textContent  = color.c.toUpperCase();
+}
+$("btnColAdd").onclick = () => {
+  const n = $("newName").value.trim() || $("newHex").value.toUpperCase();
+  customColors.push({n, c:$("newHex").value});
+  color = {n, c:$("newHex").value};
+  $("newName").value = "";
+  drawSwatches();
+};
+$("newName").addEventListener("keydown", e => { if (e.key === "Enter") $("btnColAdd").click(); });
+
+/* ---------- Eingaben ---------- */
+$("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
+$("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
+$("supPct").oninput = e => { $("lSup").textContent    = e.target.value+" %"; render(); };
+$("support").onclick = () => {
+  const on = $("support").classList.toggle("on");
+  $("support").setAttribute("aria-pressed", on);
+  $("supBox").style.display = on ? "block" : "none";
+  render();
+};
+["walls","qty","scale","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat"]
+  .forEach(id => $(id).addEventListener("input", render));
+
+/* ---------- Speichern / Laden ---------- */
+const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","walls","qty","scale",
+                "supPct","pWatt","pKwh","pMachine","pSetup","pMargin","pVat"];
+
+function snapshot(){
+  const d = { v:2, saved:new Date().toISOString(), color, materials, matIdx, customColors,
+              support:$("support").classList.contains("on"), fields:{} };
+  FIELDS.forEach(f => d.fields[f] = $(f).value);
+  if (mesh) d.mesh = { name:mesh.name, bytes:mesh.bytes,
+                       tris:Array.from(mesh.tris).map(v=>Math.round(v*1e4)/1e4) };
+  return d;
+}
+
+$("btnSave").onclick = () => {
+  const json = JSON.stringify(snapshot());
+  try { localStorage.setItem(STORE_KEY, json); } catch(e){ /* Modell sprengt das Quota */ }
+  const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([json],{type:"application/json"}));
+  a.download = "auftrag-"+($("orderId").value.trim() || stamp)+".json";
+  a.click(); URL.revokeObjectURL(a.href);
+  flash($("btnSave"), "Gespeichert ✓");
+};
+
+$("btnLoad").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type="file"; inp.accept=".json";
+  inp.onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { applyState(JSON.parse(await f.text())); flash($("btnLoad"),"Geladen ✓"); }
+    catch(err){ const w=$("warn"); w.className="warnbox show";
+                w.textContent="Stand konnte nicht gelesen werden: "+err.message; }
+  };
+  inp.click();
+};
+
+function applyState(d){
+  if (!d || d.v !== 2) throw new Error("Unbekanntes Dateiformat.");
+  FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
+  if (Array.isArray(d.materials) && d.materials.length) materials = d.materials.map(m=>({...m}));
+  matIdx = Math.min(d.matIdx ?? 0, materials.length-1);
+  customColors = Array.isArray(d.customColors) ? d.customColors : [];
+  if (d.color && d.color.c) color = d.color;
+
+  $("support").classList.toggle("on", !!d.support);
+  $("support").setAttribute("aria-pressed", !!d.support);
+  $("supBox").style.display = d.support ? "block" : "none";
+
+  if (d.mesh && d.mesh.tris){
+    const tris = new Float32Array(d.mesh.tris);
+    mesh = Object.assign({tris, name:d.mesh.name, bytes:d.mesh.bytes}, analyse(tris));
+    buildView();
+    $("drop").style.display="none"; $("viewerBox").style.display="block";
+    $("stateBadge").textContent = mesh.name+" · "+mesh.tricount.toLocaleString("de-DE")+" Dreiecke";
+  }
+  $("lInfill").textContent = $("infill").value+" %";
+  $("lLayer").textContent  = num(+$("layer").value,2)+" mm";
+  $("lSup").textContent    = $("supPct").value+" %";
+  syncMatSelect(); drawMatRows(); drawSwatches(); render();
+}
+
+// innerHTML sichern, sonst gehen die Kurz-/Langbeschriftungen beim Zurücksetzen verloren
+function flash(btn,txt){ const o=btn.innerHTML; btn.textContent=txt;
+                         setTimeout(()=>btn.innerHTML=o,1400); }
+
+/* ---------- PDF ---------- */
+$("btnPdf").onclick = () => {
+  const r = calc();
+  if (!r){ const w=$("warn"); w.className="warnbox show";
+           w.textContent="Bitte zuerst eine STL-Datei laden — ohne Modell gibt es keine Kalkulation.";
+           return; }
+  const shot = view ? cv.toDataURL("image/png") : "";
+  const g = id => $(id).value.trim();
+  const row = (a,b) => `<tr><td>${a}</td><td>${b}</td></tr>`;
+  const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
+  const dt = new Date().toLocaleString("de-DE",{dateStyle:"long",timeStyle:"short"});
+
+  $("print").innerHTML = `
+    <h1>3D-Druck Auftrag</h1>
+    <div class="meta">${esc(g("platform"))}${g("orderId")?" · Bestellung "+esc(g("orderId")):""} · erstellt am ${dt}</div>
+    <div class="cols">
+      <div>
+        <h4>Auftrag</h4>
+        <table>
+          ${row("Plattform", esc(g("platform")))}
+          ${row("Bestellnummer", esc(g("orderId")) || "–")}
+          ${row("Käufer", esc(g("buyer")) || "–")}
+          ${row("Liefern bis", g("due") ? new Date(g("due")).toLocaleDateString("de-DE") : "–")}
+          ${row("Stückzahl", r.qty)}
+        </table>
+        <h4>Modell &amp; Fertigung</h4>
+        <table>
+          ${row("Datei", esc(mesh.name))}
+          ${row("Dreiecke", mesh.tricount.toLocaleString("de-DE"))}
+          ${row("Abmessungen", r.size.map(v=>num(v,1)).join(" × ")+" mm")}
+          ${row("Skalierung", esc(g("scale"))+" %")}
+          ${row("Material", esc(r.mat.name)+" · "+eur(+r.mat.price||0)+"/kg")}
+          ${row("Farbe", esc(color.n)+" ("+color.c.toUpperCase()+")")}
+          ${row("Füllung", num(r.infill*100,0)+" %")}
+          ${row("Schichthöhe", num(r.layer,2)+" mm")}
+          ${row("Wandlinien", r.walls)}
+          ${row("Stützstruktur", r.supOn ? "ja · +"+num(r.supPct*100,0)+" % Material" : "nein")}
+          ${row("Materialbedarf", num(r.grams,1)+" g / Stück")}
+          ${row("Druckzeit", ((h?h+" h ":"")+m+" min")+" / Stück")}
+        </table>
+      </div>
+      <div>
+        ${shot ? `<img class="shot" src="${shot}" alt="Vorschau">` : ""}
+        <h4>Kalkulation</h4>
+        <table>
+          ${row("Material", eur(r.cMat))}
+          ${row("Strom ("+num(+g("pWatt")||0,0)+" W · "+num(+g("pKwh")||0,2)+" €/kWh)", eur(r.cElec))}
+          ${row("Maschinenzeit", eur(r.cMach))}
+          ${row("Rüsten &amp; Nacharbeit", eur(r.cSet))}
+          ${r.feeRate ? row("Plattformgebühr ("+num(r.feeRate*100,1)+" %)", eur(r.fee)) : ""}
+          ${row("MwSt. "+num(r.vat,0)+" %", eur(r.gross - r.gross/(1+r.vat/100)))}
+        </table>
+        <div class="tot">Gesamt ${eur(r.gross)}</div>
+        ${r.qty>1 ? `<div style="font-size:11px;color:#666">${eur(r.gross/r.qty)} pro Stück</div>` : ""}
+      </div>
+    </div>
+    ${g("notes") ? `<h4>Notizen</h4><div>${esc(g("notes")).replace(/\n/g,"<br>")}</div>` : ""}
+  `;
+  print();
+};
+
+/* ---------- Start ---------- */
+syncMatSelect(); drawMatRows(); drawSwatches(); render();
+try { const s = localStorage.getItem(STORE_KEY); if (s) applyState(JSON.parse(s)); } catch(e){}
+</script>
+</body>
+</html>
