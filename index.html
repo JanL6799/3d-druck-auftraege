@@ -171,6 +171,35 @@
   .warnbox.show{display:block}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:0 0 40px}
 
+  /* Auftragsliste */
+  .olist{display:flex;flex-direction:column;gap:8px}
+  .oitem{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line-soft);
+         border-radius:12px;background:var(--panel2);cursor:pointer;transition:.15s}
+  .oitem:hover{border-color:var(--accent)}
+  .oitem.active{background:var(--accent-soft);border-color:var(--accent)}
+  .oitem .oi-main{flex:1;min-width:0}
+  .oitem .oi-t{font-size:15px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .oitem .oi-s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .oitem .oi-p{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .oempty{font-size:14px;color:var(--muted);text-align:center;padding:18px 4px;line-height:1.5}
+
+  /* Modal */
+  .modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.4);
+        backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+        display:none;align-items:flex-start;justify-content:center;padding:40px 18px;overflow:auto}
+  .modal-backdrop.show{display:flex}
+  .modal{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
+        width:100%;max-width:560px;padding:24px 26px;margin:auto}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .modal-head h3{font-size:21px;font-weight:600;letter-spacing:-.02em;margin:0}
+  .mini-drop{border:1.5px dashed var(--line);border-radius:12px;padding:22px;text-align:center;
+        cursor:pointer;font-size:14px;color:var(--muted);background:var(--panel2);transition:.15s;margin:6px 0 16px}
+  .mini-drop:hover,.mini-drop.over{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+  .improw{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:center;padding:7px 2px;
+        border-bottom:1px solid var(--line-soft);font-size:14px}
+  .improw:last-child{border-bottom:none}
+  .improw .muted{color:var(--muted)}
+
   /* Druckansicht */
   #print{display:none}
   @media print{
@@ -213,17 +242,32 @@
   <!-- LINKS -->
   <div>
     <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">Aufträge</h3>
+          <p class="sub" style="margin:2px 0 0">Alle Aufträge liegen lokal in diesem Browser.</p>
+        </div>
+        <div class="stack">
+          <button class="sm" id="btnImport">CSV importieren</button>
+          <button class="sm" id="btnOrderNew">Neu</button>
+          <button class="primary sm" id="btnOrderSave">Sichern</button>
+        </div>
+      </div>
+      <div id="orderList" style="margin-top:18px"></div>
+    </div>
+
+    <div class="card">
       <h3>Modelldatei</h3>
-      <p class="sub">STL — das Format, das jeder FDM-Slicer direkt verarbeitet.</p>
+      <p class="sub">STL oder 3MF — beide direkt aus jedem FDM-Slicer.</p>
       <div id="drop">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 3v13m0-13l-4.5 4.5M12 3l4.5 4.5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>
         </svg>
-        <span class="big">STL-Datei ablegen oder auswählen</span>
-        <span class="sm2">Binär und ASCII · wird lokal verarbeitet, nichts wird hochgeladen</span>
+        <span class="big">STL- oder 3MF-Datei ablegen oder auswählen</span>
+        <span class="sm2">STL binär/ASCII und 3MF · wird lokal verarbeitet, nichts wird hochgeladen</span>
       </div>
-      <input type="file" id="file" accept=".stl" hidden>
+      <input type="file" id="file" accept=".stl,.3mf" hidden>
       <div id="viewerBox">
         <canvas id="cv"></canvas>
         <div class="vtools">
@@ -385,6 +429,17 @@
 </div>
 
 <div class="foot">Alles läuft lokal im Browser · keine Datei verlässt deinen Rechner</div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle"></h3>
+      <button class="del" id="modalClose" style="font-size:24px" title="Schließen">&times;</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
 <div id="print"></div>
 
 <script>
@@ -424,6 +479,7 @@ const PALETTE = [
 const PLATFORM_FEE = { "eBay":0.11, "Etsy":0.095, "Amazon":0.15, "Direktanfrage":0, "Sonstige":0 };
 const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
+const ORDERS_KEY = "druckauftrag.orders.v1";
 
 /* ---------- Zustand ---------- */
 let mesh = null;
@@ -467,6 +523,123 @@ function parseSTL(buf){
   }
   if (out.length < 9) throw new Error("Keine Dreiecke gefunden — ist das eine gültige STL-Datei?");
   return new Float32Array(out);
+}
+
+/* ---------- 3MF-Parser (ZIP + natives Inflate, keine Bibliothek) ---------- */
+async function parse3MF(buf){
+  const xmlBytes = await unzipModel(buf);
+  const doc = new DOMParser().parseFromString(new TextDecoder().decode(xmlBytes), "application/xml");
+  if (doc.getElementsByTagName("parsererror").length)
+    throw new Error("Die 3MF-Modelldaten konnten nicht gelesen werden.");
+
+  // Objekte einsammeln: Mesh-Objekte → {tri}, zusammengesetzte → {comp:[…]}
+  const objs = {};
+  for (const obj of doc.getElementsByTagName("object")){
+    const id = obj.getAttribute("id");
+    const mesh = obj.getElementsByTagName("mesh")[0];
+    if (mesh){
+      const vEls = mesh.getElementsByTagName("vertex");
+      const verts = new Float64Array(vEls.length*3);
+      for (let i=0;i<vEls.length;i++){
+        verts[i*3]   = +vEls[i].getAttribute("x");
+        verts[i*3+1] = +vEls[i].getAttribute("y");
+        verts[i*3+2] = +vEls[i].getAttribute("z");
+      }
+      const tEls = mesh.getElementsByTagName("triangle");
+      const tri = new Float32Array(tEls.length*9);
+      for (let i=0;i<tEls.length;i++){
+        const idx = [+tEls[i].getAttribute("v1"),+tEls[i].getAttribute("v2"),+tEls[i].getAttribute("v3")];
+        for (let k=0;k<3;k++){
+          tri[i*9+k*3]   = verts[idx[k]*3];
+          tri[i*9+k*3+1] = verts[idx[k]*3+1];
+          tri[i*9+k*3+2] = verts[idx[k]*3+2];
+        }
+      }
+      objs[id] = {tri};
+    } else {
+      objs[id] = {comp:[...obj.getElementsByTagName("component")]
+        .map(c => ({id:c.getAttribute("objectid"), m:parseMat3MF(c.getAttribute("transform"))}))};
+    }
+  }
+
+  // Über die Bauplatte (build/item) sammeln, Transformationen berücksichtigen
+  const out = [];
+  const emit = (id, m) => {
+    const o = objs[id]; if (!o) return;
+    if (o.tri) for (let i=0;i<o.tri.length;i+=3){
+      const p = applyMat3MF(m, o.tri[i], o.tri[i+1], o.tri[i+2]);
+      out.push(p[0],p[1],p[2]);
+    }
+    if (o.comp) for (const c of o.comp) emit(c.id, mulMat3MF(c.m, m));
+  };
+  const build = doc.getElementsByTagName("build")[0];
+  const items = build ? [...build.getElementsByTagName("item")] : [];
+  if (items.length)
+    for (const it of items) emit(it.getAttribute("objectid"), parseMat3MF(it.getAttribute("transform")));
+  else
+    for (const id in objs) if (objs[id].tri) emit(id, null);   // Notnagel ohne Bauplatte
+
+  if (out.length < 9) throw new Error("Keine Dreiecke im 3MF-Modell gefunden.");
+  return new Float32Array(out);
+}
+
+// 3MF-Transform: 12 Zahlen, Zeilenvektor-Konvention (Punkt · Matrix)
+function parseMat3MF(s){
+  if (!s) return null;
+  const n = s.trim().split(/\s+/).map(Number);
+  return n.length >= 12 ? n : null;
+}
+function applyMat3MF(m,x,y,z){
+  if (!m) return [x,y,z];
+  return [ x*m[0]+y*m[3]+z*m[6]+m[9],
+           x*m[1]+y*m[4]+z*m[7]+m[10],
+           x*m[2]+y*m[5]+z*m[8]+m[11] ];
+}
+// Verkettung: erst a anwenden, dann b  (Zeilenvektoren: P·a·b)
+function mulMat3MF(a,b){
+  if (!a) return b; if (!b) return a;
+  const A=[[a[0],a[1],a[2],0],[a[3],a[4],a[5],0],[a[6],a[7],a[8],0],[a[9],a[10],a[11],1]];
+  const B=[[b[0],b[1],b[2],0],[b[3],b[4],b[5],0],[b[6],b[7],b[8],0],[b[9],b[10],b[11],1]];
+  const R=[];
+  for (let i=0;i<4;i++) for (let j=0;j<3;j++)
+    R.push(A[i][0]*B[0][j]+A[i][1]*B[1][j]+A[i][2]*B[2][j]+A[i][3]*B[3][j]);
+  return R;
+}
+
+// ZIP-Zentralverzeichnis lesen, Modelldatei finden, roh-deflate über DecompressionStream
+async function unzipModel(buf){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength-22; i >= 0 && i > buf.byteLength-22-65536; i--)
+    if (dv.getUint32(i,true) === 0x06054b50){ eocd = i; break; }
+  if (eocd < 0) throw new Error("Das ist kein gültiges 3MF-Archiv (ZIP).");
+  const cdOff = dv.getUint32(eocd+16,true), cdCount = dv.getUint16(eocd+10,true);
+  const entries = []; let p = cdOff;
+  for (let i=0;i<cdCount;i++){
+    if (dv.getUint32(p,true) !== 0x02014b50) break;
+    const method   = dv.getUint16(p+10,true);
+    const compSize = dv.getUint32(p+20,true);
+    const nameLen  = dv.getUint16(p+28,true);
+    const extraLen = dv.getUint16(p+30,true);
+    const commLen  = dv.getUint16(p+32,true);
+    const lho      = dv.getUint32(p+42,true);
+    const name = new TextDecoder().decode(u8.subarray(p+46, p+46+nameLen));
+    entries.push({name, method, compSize, lho});
+    p += 46 + nameLen + extraLen + commLen;
+  }
+  const ent = entries.find(e => /3dmodel\.model$/i.test(e.name)) || entries.find(e => /\.model$/i.test(e.name));
+  if (!ent) throw new Error("Keine 3D-Modelldaten im 3MF-Archiv gefunden.");
+  if (dv.getUint32(ent.lho,true) !== 0x04034b50) throw new Error("Das 3MF-Archiv ist beschädigt.");
+  const nl = dv.getUint16(ent.lho+26,true), xl = dv.getUint16(ent.lho+28,true);
+  const start = ent.lho + 30 + nl + xl;
+  const end   = ent.compSize > 0 ? start + ent.compSize : cdOff;
+  const comp  = u8.subarray(start, end);
+  if (ent.method === 0) return comp;                       // unkomprimiert abgelegt
+  if (ent.method !== 8) throw new Error("Das 3MF nutzt eine nicht unterstützte Komprimierung.");
+  if (typeof DecompressionStream === "undefined")
+    throw new Error("Dieser Browser kann 3MF nicht entpacken. Bitte die Datei als STL exportieren.");
+  const stream = new Blob([comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 function analyse(tris){
@@ -641,13 +814,15 @@ cv.addEventListener("wheel", e => {
 
 /* ---------- Datei laden ---------- */
 async function loadFile(f){
-  if (!/\.stl$/i.test(f.name)){
+  const is3mf = /\.3mf$/i.test(f.name), isStl = /\.stl$/i.test(f.name);
+  if (!isStl && !is3mf){
     const w=$("warn"); w.className="warnbox show";
-    w.textContent = "„"+f.name+"“ ist keine STL-Datei. Die Drucker verarbeiten nur STL — "
-      + "aus STEP, 3MF oder OBJ bitte vorher exportieren."; return;
+    w.textContent = "„"+f.name+"“ wird nicht unterstützt. Bitte STL oder 3MF laden — "
+      + "STEP oder OBJ vorher im Slicer oder CAD exportieren."; return;
   }
   try {
-    const tris = parseSTL(await f.arrayBuffer());
+    const buf = await f.arrayBuffer();
+    const tris = is3mf ? await parse3MF(buf) : parseSTL(buf);
     mesh = Object.assign({tris, name:f.name, bytes:f.size}, analyse(tris));
     buildView(); rotX=-1.05; rotY=0.6; zoom=1;
     $("drop").style.display="none"; $("viewerBox").style.display="block";
@@ -665,11 +840,12 @@ $("file").onchange = e => e.target.files[0] && loadFile(e.target.files[0]);
 $("drop").addEventListener("drop", e => e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]));
 $("btnRot").onclick   = () => { spin=!spin; $("btnRot").textContent = "Drehen: "+(spin?"an":"aus"); };
 $("btnFit").onclick   = () => { rotX=-1.05; rotY=0.6; zoom=1; };
-$("btnClear").onclick = () => {
+function clearMesh(){
   mesh=null; view=null; $("file").value="";
   $("drop").style.display="block"; $("viewerBox").style.display="none";
   $("stateBadge").textContent="Kein Modell"; $("warn").className="warnbox"; render();
-};
+}
+$("btnClear").onclick = clearMesh;
 
 /* ---------- Material ---------- */
 function syncMatSelect(){
@@ -885,8 +1061,239 @@ $("btnPdf").onclick = () => {
   print();
 };
 
+/* ---------- Auftragsliste ---------- */
+let orders = [];
+let currentOrderId = null;
+
+function loadOrders(){
+  try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY)) || []; } catch(e){ orders = []; }
+  if (!Array.isArray(orders)) orders = [];
+}
+function persistOrders(){
+  try { localStorage.setItem(ORDERS_KEY, JSON.stringify(orders)); return true; }
+  catch(e){ return false; }
+}
+function newId(){
+  return (crypto.randomUUID ? crypto.randomUUID() : "o"+Date.now()+Math.random().toString(16).slice(2));
+}
+function orderTitle(o){
+  return (o.orderId||"").trim() || (o.buyer||"").trim() || "Auftrag ohne Nummer";
+}
+
+function drawOrders(){
+  const box = $("orderList");
+  if (!orders.length){
+    box.innerHTML = `<div class="oempty">Noch keine Aufträge gesichert.<br>„Sichern“ legt den aktuellen Stand ab, „CSV importieren“ holt Bestellungen aus eBay, Etsy oder Amazon.</div>`;
+    return;
+  }
+  const sorted = orders.slice().sort((a,b) => (b.saved||"").localeCompare(a.saved||""));
+  box.innerHTML = `<div class="olist">` + sorted.map(o => {
+    const d = o.saved ? new Date(o.saved).toLocaleDateString("de-DE") : "";
+    const sub = [o.platform, (o.buyer||"").trim(), d].filter(Boolean).join(" · ");
+    return `<div class="oitem${o.id===currentOrderId?" active":""}" data-id="${esc(o.id)}">
+      <div class="oi-main">
+        <div class="oi-t">${esc(orderTitle(o))}</div>
+        <div class="oi-s">${esc(sub) || "—"}</div>
+      </div>
+      <div class="oi-p">${o.priceText ? esc(o.priceText) : ""}</div>
+      <button class="del" data-del="${esc(o.id)}" title="Löschen">&times;</button>
+    </div>`;
+  }).join("") + `</div>`;
+
+  box.querySelectorAll(".oitem").forEach(el => el.onclick = e => {
+    if (e.target.closest("[data-del]")) return;
+    loadOrder(el.dataset.id);
+  });
+  box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    orders = orders.filter(o => o.id !== b.dataset.del);
+    if (currentOrderId === b.dataset.del) currentOrderId = null;
+    persistOrders(); drawOrders();
+  });
+}
+
+function loadOrder(id){
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  if (!(o.snapshot && o.snapshot.mesh)) clearMesh();
+  applyState(o.snapshot || {v:2, fields:{platform:o.platform, orderId:o.orderId, buyer:o.buyer}});
+  currentOrderId = id;
+  drawOrders();
+}
+
+$("btnOrderSave").onclick = () => {
+  const r = calc();
+  const rec = {
+    id: currentOrderId || newId(),
+    saved: new Date().toISOString(),
+    platform: $("platform").value,
+    orderId: $("orderId").value.trim(),
+    buyer: $("buyer").value.trim(),
+    priceText: r ? eur(r.gross) : "",
+    snapshot: snapshot()
+  };
+  const i = orders.findIndex(o => o.id === rec.id);
+  if (i >= 0) orders[i] = rec; else orders.push(rec);
+  currentOrderId = rec.id;
+  const ok = persistOrders();
+  drawOrders();
+  flash($("btnOrderSave"), ok ? "Gesichert ✓" : "Zu groß fürs Archiv");
+};
+$("btnOrderNew").onclick = () => {
+  currentOrderId = null;
+  ["orderId","buyer","notes"].forEach(f => $(f).value = "");
+  $("due").value = "";
+  drawOrders();
+  flash($("btnOrderNew"), "Neu ✓");
+};
+
+/* ---------- CSV-Import (eBay / Etsy / Amazon, alles lokal) ---------- */
+function parseCSV(text){
+  text = text.replace(/^﻿/, "");
+  const nl = text.indexOf("\n");
+  const first = nl >= 0 ? text.slice(0, nl) : text;
+  const delim = [";","\t",","].map(d => [d, first.split(d).length]).sort((a,b) => b[1]-a[1])[0][0];
+  const rows = []; let row = [], field = "", inQ = false;
+  for (let i=0;i<text.length;i++){
+    const ch = text[i];
+    if (inQ){
+      if (ch === '"'){ if (text[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
+      else field += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === delim){ row.push(field); field = ""; }
+      else if (ch === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (ch !== "\r") field += ch;
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function extractOrders(rows){
+  const ORDER = ["order number","order id","order-id","bestellnummer","transaction id","order no",
+                 "sales record number","verkaufsvorgangsnummer"];
+  const BUYER = ["buyer name","buyer username","full name","buyer","recipient name","ship to name",
+                 "buyer-name","recipient","käufer","name des käufers","versandname"];
+  const norm = s => s.trim().toLowerCase();
+  const findCol = (head, keys) => {
+    let i = head.findIndex(c => keys.includes(c));
+    if (i < 0) i = head.findIndex(c => keys.some(k => c.includes(k)));
+    return i;
+  };
+  for (let h=0; h<Math.min(rows.length,20); h++){
+    const head = rows[h].map(norm);
+    const oi = findCol(head, ORDER), bi = findCol(head, BUYER);
+    if (oi < 0 && bi < 0) continue;
+    const seen = new Set(), found = [];
+    for (let r=h+1; r<rows.length; r++){
+      const cells = rows[r];
+      if (!cells || cells.every(c => !c.trim())) continue;
+      const orderId = oi >= 0 ? (cells[oi]||"").trim() : "";
+      const buyer   = bi >= 0 ? (cells[bi]||"").trim() : "";
+      if (!orderId && !buyer) continue;
+      const key = orderId || buyer;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({orderId, buyer});
+    }
+    if (found.length) return found;
+  }
+  return [];
+}
+
+let importRows = [];
+function openImport(){
+  modalShow("Bestellungen importieren", `
+    <p class="sub" style="margin-bottom:4px">Bestellungen bei eBay, Etsy oder Amazon als CSV exportieren und hier ablegen. Die Datei bleibt lokal, nichts wird hochgeladen.</p>
+    <div class="mini-drop" id="impDrop">CSV-Datei ablegen oder auswählen</div>
+    <input type="file" id="impFile" accept=".csv,.tsv,.txt" hidden>
+    <label for="impText">oder Inhalt einfügen</label>
+    <textarea id="impText" placeholder="Bestellnummer;Käufer&#10;14-13454-98123;maxmuster"></textarea>
+    <div class="row" style="margin-top:14px;align-items:end">
+      <div>
+        <label for="impPlat">Plattform für diese Bestellungen</label>
+        <select id="impPlat">
+          <option>eBay</option><option>Etsy</option><option>Amazon</option>
+          <option>Direktanfrage</option><option>Sonstige</option>
+        </select>
+      </div>
+      <div style="text-align:right"><button class="primary" id="impParse">Vorschau</button></div>
+    </div>
+    <div id="impResult" style="margin-top:16px"></div>
+  `);
+
+  const readText = txt => {
+    importRows = extractOrders(parseCSV(txt));
+    const res = $("impResult");
+    if (!importRows.length){
+      res.innerHTML = `<div class="oempty">Keine Bestellnummern oder Käufer erkannt. Enthält der Export eine Kopfzeile mit „Order number“ / „Bestellnummer“ oder „Buyer“ / „Käufer“?</div>`;
+      return;
+    }
+    res.innerHTML =
+      `<label>${importRows.length} Bestellung${importRows.length>1?"en":""} erkannt</label>` +
+      importRows.slice(0,8).map(o =>
+        `<div class="improw">
+           <div>${esc(o.orderId) || "<span class='muted'>ohne Nummer</span>"}</div>
+           <div>${esc(o.buyer) || "<span class='muted'>—</span>"}</div>
+           <div class="muted">↴</div>
+         </div>`).join("") +
+      (importRows.length>8 ? `<div class="improw"><div class="muted" style="grid-column:1/-1">… und ${importRows.length-8} weitere</div></div>` : "") +
+      `<div style="text-align:right;margin-top:16px">
+         <button class="primary" id="impDo">${importRows.length} übernehmen</button></div>`;
+    $("impDo").onclick = () => {
+      const plat = $("impPlat").value;
+      const existing = new Set(orders.map(o => (o.platform+"|"+o.orderId).toLowerCase()));
+      let added = 0;
+      importRows.forEach(o => {
+        const key = (plat+"|"+o.orderId).toLowerCase();
+        if (o.orderId && existing.has(key)) return;
+        existing.add(key);
+        orders.push({
+          id:newId(), saved:new Date().toISOString(),
+          platform:plat, orderId:o.orderId, buyer:o.buyer, priceText:"",
+          snapshot:{v:2, fields:{platform:plat, orderId:o.orderId, buyer:o.buyer}}
+        });
+        added++;
+      });
+      persistOrders(); drawOrders(); modalHide();
+    };
+  };
+
+  $("impParse").onclick = () => {
+    const txt = $("impText").value.trim();
+    if (txt) readText(txt); else $("impFile").click();
+  };
+  $("impDrop").onclick = () => $("impFile").click();
+  $("impFile").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const txt = await f.text();
+    $("impText").value = txt.length > 4000 ? txt.slice(0,4000)+"\n…" : txt;
+    readText(txt);
+  };
+  ["dragenter","dragover"].forEach(t => $("impDrop").addEventListener(t, e=>{e.preventDefault();$("impDrop").classList.add("over");}));
+  ["dragleave","drop"].forEach(t => $("impDrop").addEventListener(t, e=>{e.preventDefault();$("impDrop").classList.remove("over");}));
+  $("impDrop").addEventListener("drop", async e => {
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const txt = await f.text();
+    $("impText").value = txt.length > 4000 ? txt.slice(0,4000)+"\n…" : txt;
+    readText(txt);
+  });
+}
+
+/* ---------- Modal ---------- */
+function modalShow(title, html){
+  $("modalTitle").textContent = title;
+  $("modalBody").innerHTML = html;
+  $("modal").classList.add("show");
+}
+function modalHide(){ $("modal").classList.remove("show"); }
+$("modalClose").onclick = modalHide;
+$("modal").addEventListener("click", e => { if (e.target === $("modal")) modalHide(); });
+addEventListener("keydown", e => { if (e.key === "Escape") modalHide(); });
+$("btnImport").onclick = openImport;
+
 /* ---------- Start ---------- */
 syncMatSelect(); drawMatRows(); drawSwatches(); render();
+loadOrders(); drawOrders();
 try { const s = localStorage.getItem(STORE_KEY); if (s) applyState(JSON.parse(s)); } catch(e){}
 </script>
 </body>

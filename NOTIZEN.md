@@ -1,9 +1,10 @@
 # 3D-Druck Auftragserfassung
 
-Stand: 16. Juli 2026
+Stand: 18. Juli 2026
 
 Werkzeug zum Erfassen und Kalkulieren von 3D-Druckaufträgen, die über eBay, Etsy oder Amazon
-hereinkommen. STL laden → Material und Farbe wählen → Preis → Auftragsblatt als PDF.
+hereinkommen. STL/3MF laden → Material und Farbe wählen → Preis → Auftragsblatt als PDF.
+Mehrere Aufträge werden lokal verwaltet, Bestellungen lassen sich per CSV importieren.
 
 ## Dateien
 
@@ -13,13 +14,23 @@ hereinkommen. STL laden → Material und Farbe wählen → Preis → Auftragsbla
 
 **Kein `build_standalone.py` wie in den anderen Ordnern.** Diese Seite wurde von vornherein als
 vollständiges HTML-Dokument mit eigenem `<head>` geschrieben, nicht als Artifact-Quelle. Sie hat
-keine externen Abhängigkeiten: STL-Parser, 3D-Renderer und PDF-Ausgabe sind selbst geschrieben,
-kein CDN, kein Server. Falls sie später als Artifact veröffentlicht werden soll, muss der `<head>`
-raus — dann lohnt ein Build-Skript wie bei PV und E-Auto.
+keine externen Abhängigkeiten: STL-/3MF-Parser, 3D-Renderer und PDF-Ausgabe sind selbst
+geschrieben, kein CDN, kein Server. Das 3MF-Entpacken liest das ZIP-Zentralverzeichnis von Hand
+und nutzt für Deflate das native `DecompressionStream` des Browsers — keine Bibliothek. Falls die
+Seite später als Artifact veröffentlicht werden soll, muss der `<head>` raus — dann lohnt ein
+Build-Skript wie bei PV und E-Auto.
 
 ## Was drin ist
 
-- **Upload:** STL binär und ASCII, per Drag-and-drop. Alles bleibt lokal im Browser.
+- **Auftragsliste:** mehrere Aufträge nebeneinander, lokal in `localStorage`
+  (`druckauftrag.orders.v1`). „Sichern“ legt den aktuellen Stand ab bzw. aktualisiert den
+  geladenen Auftrag, „Neu“ beginnt einen frischen. Klick auf einen Eintrag lädt ihn zurück.
+  Ersetzt die alte „eine JSON-Datei pro Auftrag“-Handhabung — die JSON-Knöpfe in der Kopfzeile
+  bleiben zusätzlich als Export/Backup erhalten.
+- **CSV-Import:** Bestellexport von eBay, Etsy oder Amazon per Drag-and-drop oder Einfügen.
+  Erkennt Trennzeichen (`;`, Tab, `,`) und die Spalten für Bestellnummer und Käufer selbst,
+  entdoppelt und legt jede Bestellung als Auftrag an. Alles lokal, keine API, kein Server.
+- **Upload:** STL binär und ASCII sowie 3MF, per Drag-and-drop. Alles bleibt lokal im Browser.
 - **Vorschau:** eigener Software-Renderer auf Canvas (Painter's Algorithm, Flat-Shading),
   drehbar, zoombar, in der gewählten Filamentfarbe.
 - **Material:** 10 Filamente als Startwerte, aber Name, €/kg, Dichte und Tempo-Faktor sind alle
@@ -56,8 +67,11 @@ Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, 
 
 ## Verifiziert
 
-- Testwürfel 20 mm → **exakt 8000 mm³**, über den Binär- *und* den ASCII-Pfad (signiertes
-  Tetraedervolumen gegen den Ursprung).
+- Testwürfel 20 mm → **exakt 8000 mm³**, über den STL-Binär-, den STL-ASCII- *und* den
+  3MF-Pfad (signiertes Tetraedervolumen gegen den Ursprung). Der 3MF-Test baut das ZIP mit
+  echtem Deflate und prüft Volumen (8,0 cm³) und Abmessungen (20 × 20 × 20 mm) im Browser.
+- CSV-Import: gemischte Trennzeichen, Duplikate und Leerzeilen werden gefiltert; die erkannten
+  Aufträge landen in `localStorage` und lassen sich per Klick mit Bestellnummer und Käufer laden.
 - Stromformel linear geprüft: doppelter Preis oder doppelte Leistung → punktgenau doppelte Kosten.
 - Speichern/Laden-Rundlauf stellt eigene Materialien, eigene Farben und Preis identisch wieder her.
 - PDF-Summe deckt sich mit der Anzeige.
@@ -74,13 +88,32 @@ Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, 
    sprengt das das `localStorage`-Quota — der Download funktioniert dann trotzdem, nur der
    automatische Wiedereinstieg beim Öffnen fällt aus (still abgefangen).
 5. **Format v2 ist nicht abwärtskompatibel** zu Ständen aus der ersten Fassung (v1).
+6. **3MF-Transformationen** werden zwar für Build-Items und Komponenten mitgerechnet, aber ohne
+   Einheiten-Umrechnung — die 3MF-Vorgabe „Millimeter“ wird angenommen. Farb-/Materialdaten aus
+   dem 3MF werden ignoriert (nur die Geometrie zählt für die Kalkulation).
+7. **Der CSV-Import erkennt Spalten über gängige Kopfzeilen-Namen** (Order number/Bestellnummer,
+   Buyer/Käufer …). Exotische oder umbenannte Exporte werden nicht gefunden — dann bleibt das
+   Einfügefeld für manuelles Nacharbeiten.
+
+## Erledigt (18. Juli 2026)
+
+Die früheren offenen Punkte 1–3 sind umgesetzt — durchgängig lokal, ohne Server:
+
+1. **CSV-Import statt reiner Handerfassung.** eBay/Etsy/Amazon erlauben einen CSV-Bestellexport;
+   der wird lokal geparst und legt die Aufträge automatisch an. Der ursprünglich befürchtete
+   API-/Server-Zwang entfällt damit — die „läuft lokal per Doppelklick“-Eigenschaft bleibt.
+   *(Ein echter Live-Abgleich per Plattform-API bräuchte weiterhin einen Server; das ist bewusst
+   nicht gebaut.)*
+2. **3MF zusätzlich zu STL.** Eigener ZIP-Reader plus natives `DecompressionStream` — keine
+   Bibliothek. STEP bleibt außen vor, das bräuchte einen CAD-Kernel.
+3. **Auftragsliste** oben links: mehrere Aufträge in `localStorage` statt einer JSON pro Auftrag.
 
 ## Offene Punkte
 
-1. **Aufträge werden noch von Hand erfasst.** Bestellnummer und Käufer tippt man ab. Ein Import aus
-   eBay/Etsy wäre der nächste sinnvolle Schritt, braucht aber deren API und damit einen Server —
-   der Punkt, an dem die „läuft lokal per Doppelklick“-Eigenschaft fällt. Bewusste Entscheidung.
-2. **Nur STL.** 3MF und STEP kommen häufig von Kunden; STL deckt aber alle FDM-Slicer ab.
-3. **Keine Auftragsliste** — jeder Auftrag ist eine eigene JSON-Datei. Ab ~20 Aufträgen/Monat
-   nervt das.
-4. Die 10 Materialpreise sind Marktschätzungen Juli 2026, **keine Einkaufspreise von Jan**.
+1. **Kein Live-Abgleich mit den Plattformen.** Der CSV-Import ersetzt das Abtippen, aber ein
+   automatischer Statusabgleich (bezahlt, versendet) bräuchte weiterhin eBay/Etsy-API und Server.
+2. **Kein STEP.** 3MF ist jetzt drin und deckt mit STL alle FDM-Slicer ab; STEP käme nur mit
+   CAD-Kernel.
+3. Die 10 Materialpreise sind Marktschätzungen Juli 2026, **keine Einkaufspreise von Jan**.
+4. **Auftragsliste ohne Suche/Filter.** Ab vielen Dutzend Aufträgen wäre eine Suche sinnvoll;
+   aktuell nur nach Datum sortiert.
