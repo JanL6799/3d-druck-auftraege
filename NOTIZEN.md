@@ -34,7 +34,12 @@ Build-Skript wie bei PV und E-Auto.
 - **Vorschau:** eigener Software-Renderer auf Canvas (Painter's Algorithm, Flat-Shading),
   drehbar, zoombar, in der gewählten Filamentfarbe.
 - **Material:** 10 Filamente als Startwerte, aber Name, €/kg, Dichte und Tempo-Faktor sind alle
-  frei editierbar; anlegen, löschen, zurücksetzen.
+  frei editierbar; anlegen, löschen, zurücksetzen. **Als Standard sichern** legt die eigenen
+  Einkaufspreise dauerhaft in `localStorage` (`druckauftrag.materials.v1`) ab — danach starten
+  neue Aufträge mit Jans Preisen statt den Marktschätzungen, „Zurücksetzen“ holt genau diese,
+  „Marktwerte laden“ die ursprünglichen Schätzwerte.
+- **Bauraum:** X/Y/Z frei einstellbar (Startwert 256³). Die Größenwarnung berücksichtigt ein
+  Drehen um 90° in der Ebene (sortierte Grundfläche gegen sortierte Bett-Grundfläche, Höhe separat).
 - **Farbe:** 56 benannte Töne plus beliebige eigene Farben. Farbe hängt **nicht** am Material.
 - **Einstellungen:** Füllung, Schichthöhe, Wandlinien, Stückzahl, Skalierung, Stützstruktur
   (Schalter + freier Prozentregler).
@@ -62,8 +67,8 @@ Retraktion ab, die 8 mm³/s sind der Referenzdurchsatz bei 0,2 mm Schicht und PL
 Plattformgebühren fest hinterlegt: eBay 11 %, Etsy 9,5 %, Amazon 15 %. Die Gebühr wird auf den
 Endpreis aufgeschlagen (`/(1−Satz)`), nicht draufgerechnet — sonst bleibt nach Abzug zu wenig übrig.
 
-Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, Bauraumwarnung ab
-256 × 256 × 256 mm.
+Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, Bauraum 256 × 256 ×
+256 mm (jetzt frei einstellbar).
 
 ## Verifiziert
 
@@ -72,6 +77,10 @@ Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, 
   echtem Deflate und prüft Volumen (8,0 cm³) und Abmessungen (20 × 20 × 20 mm) im Browser.
 - CSV-Import: gemischte Trennzeichen, Duplikate und Leerzeilen werden gefiltert; die erkannten
   Aufträge landen in `localStorage` und lassen sich per Klick mit Bestellnummer und Käufer laden.
+- Eigene Materialpreise: „Als Standard sichern“ → Reload → neue Aufträge starten mit dem
+  gesicherten Preis; „Marktwerte laden“ stellt die Schätzwerte wieder her (im Browser geprüft).
+- Bauraum-Warnung: Quader 25 × 10 × 5 mm passt bei 12 × 30 mm Bett (per 90°-Drehung), löst aber
+  bei 12 × 20 mm aus. v1-Stand (flaches Format) lädt sauber, ein v3-Stand wird klar abgelehnt.
 - Stromformel linear geprüft: doppelter Preis oder doppelte Leistung → punktgenau doppelte Kosten.
 - Speichern/Laden-Rundlauf stellt eigene Materialien, eigene Farben und Preis identisch wieder her.
 - PDF-Summe deckt sich mit der Anzeige.
@@ -83,12 +92,14 @@ Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, 
    Wer es genau braucht, muss die Zeit aus dem Slicer übernehmen.
 2. **Stützen sind ein pauschaler Materialaufschlag**, aus der Geometrie wird nichts abgeleitet —
    deshalb ist der Prozentsatz frei einstellbar (kleine Brücke ~5 %, frei stehende Figur ~60 %).
-3. **Der Bauraum 256³ ist fest verdrahtet** (`render()`), nicht einstellbar.
-4. **Speichern legt die Geometrie mit ins JSON.** Bei Modellen mit vielen hunderttausend Dreiecken
+   Das bleibt bewusst so; echte Stützgeometrie käme nur mit einem Slicer.
+3. **Speichern legt die Geometrie mit ins JSON.** Bei Modellen mit vielen hunderttausend Dreiecken
    sprengt das das `localStorage`-Quota — der Download funktioniert dann trotzdem, nur der
    automatische Wiedereinstieg beim Öffnen fällt aus (still abgefangen).
-5. **Format v2 ist nicht abwärtskompatibel** zu Ständen aus der ersten Fassung (v1).
-6. **3MF-Transformationen** werden zwar für Build-Items und Komponenten mitgerechnet, aber ohne
+4. **v1-Migration ist Best-effort.** `migrateV1()` übernimmt Felder aus einem flachen v1-Objekt;
+   was v1 nicht gespeichert hat, kann sie nicht rekonstruieren. Ohne echte v1-Datei ist das die
+   plausibelste Annahme über das alte Format.
+5. **3MF-Transformationen** werden zwar für Build-Items und Komponenten mitgerechnet, aber ohne
    Einheiten-Umrechnung — die 3MF-Vorgabe „Millimeter“ wird angenommen. Farb-/Materialdaten aus
    dem 3MF werden ignoriert (nur die Geometrie zählt für die Kalkulation).
 7. **Der CSV-Import erkennt Spalten über gängige Kopfzeilen-Namen** (Order number/Bestellnummer,
@@ -97,7 +108,7 @@ Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, 
 
 ## Erledigt (18. Juli 2026)
 
-Die früheren offenen Punkte 1–3 sind umgesetzt — durchgängig lokal, ohne Server:
+Erste Runde (PR #1) — durchgängig lokal, ohne Server:
 
 1. **CSV-Import statt reiner Handerfassung.** eBay/Etsy/Amazon erlauben einen CSV-Bestellexport;
    der wird lokal geparst und legt die Aufträge automatisch an. Der ursprünglich befürchtete
@@ -108,12 +119,20 @@ Die früheren offenen Punkte 1–3 sind umgesetzt — durchgängig lokal, ohne S
    Bibliothek. STEP bleibt außen vor, das bräuchte einen CAD-Kernel.
 3. **Auftragsliste** oben links: mehrere Aufträge in `localStorage` statt einer JSON pro Auftrag.
 
+Zweite Runde:
+
+4. **Eigene Einkaufspreise als Standard.** „Als Standard sichern“ legt Jans Materialpreise in
+   `localStorage` ab; neue Aufträge starten damit statt mit den Marktschätzungen. „Marktwerte
+   laden“ holt die Schätzwerte zurück.
+5. **Bauraum konfigurierbar + v1 wieder ladbar.** X/Y/Z frei einstellbar mit 90°-Rotationslogik
+   in der Warnung; `applyState()` migriert v1-Stände (best-effort) und lehnt neuere Formate mit
+   klarer Meldung ab. Die pauschalen Stützen bleiben bewusst wie sie sind.
+
 ## Offene Punkte
 
 1. **Kein Live-Abgleich mit den Plattformen.** Der CSV-Import ersetzt das Abtippen, aber ein
    automatischer Statusabgleich (bezahlt, versendet) bräuchte weiterhin eBay/Etsy-API und Server.
 2. **Kein STEP.** 3MF ist jetzt drin und deckt mit STL alle FDM-Slicer ab; STEP käme nur mit
    CAD-Kernel.
-3. Die 10 Materialpreise sind Marktschätzungen Juli 2026, **keine Einkaufspreise von Jan**.
-4. **Auftragsliste ohne Suche/Filter.** Ab vielen Dutzend Aufträgen wäre eine Suche sinnvoll;
+3. **Auftragsliste ohne Suche/Filter.** Ab vielen Dutzend Aufträgen wäre eine Suche sinnvoll;
    aktuell nur nach Datum sortiert.

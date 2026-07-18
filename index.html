@@ -363,11 +363,14 @@
         </div>
         <div class="stack" style="margin-top:12px">
           <button class="sm" id="btnMatAdd">+ Material</button>
+          <button class="sm" id="btnMatSave">Als Standard sichern</button>
           <button class="sm" id="btnMatReset">Zurücksetzen</button>
         </div>
         <p class="hint" style="text-align:left">
           <b>Tempo</b> ist der Geschwindigkeitsfaktor gegenüber PLA (1,0). TPU druckt etwa halb so
-          schnell, also 0,45.
+          schnell, also 0,45. — <b>Als Standard sichern</b> merkt sich deine echten Einkaufspreise
+          dauerhaft in diesem Browser; „Zurücksetzen“ holt genau diese wieder.
+          <button class="link" id="btnMatFactory" style="font-size:12px;padding:0">Marktwerte laden</button>
         </p>
       </div>
     </div>
@@ -420,9 +423,16 @@
         <div><label for="pMargin">Marge %</label><input id="pMargin" type="number" step="5" value="40"></div>
         <div><label for="pVat">MwSt. %</label><input id="pVat" type="number" step="1" min="0" value="19"></div>
       </div>
+      <label style="margin-bottom:6px">Bauraum deines Druckers (mm)</label>
+      <div class="row3">
+        <div><input id="bx" type="number" min="10" step="1" value="256" aria-label="Bauraum X"></div>
+        <div><input id="by" type="number" min="10" step="1" value="256" aria-label="Bauraum Y"></div>
+        <div><input id="bz" type="number" min="10" step="1" value="256" aria-label="Bauraum Z"></div>
+      </div>
       <p class="hint" style="text-align:left">
         Strom wird getrennt gerechnet: Leistung × Druckzeit × Preis. In „Maschine €/h“ gehören
-        Abschreibung, Düsen und Wartung — ohne Strom, sonst zählst du ihn doppelt.
+        Abschreibung, Düsen und Wartung — ohne Strom, sonst zählst du ihn doppelt. Der Bauraum
+        steuert die Größenwarnung; ein Drehen um 90° in der Ebene wird dabei berücksichtigt.
       </p>
     </div>
   </div>
@@ -480,10 +490,21 @@ const PLATFORM_FEE = { "eBay":0.11, "Etsy":0.095, "Amazon":0.15, "Direktanfrage"
 const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
+const MATERIALS_KEY = "druckauftrag.materials.v1";
+
+// Jans eigene Einkaufspreise, falls einmal als Standard gesichert — sonst die Marktschätzungen
+function loadUserMaterials(){
+  try {
+    const m = JSON.parse(localStorage.getItem(MATERIALS_KEY));
+    if (Array.isArray(m) && m.length) return m.map(x => ({...x}));
+  } catch(e){}
+  return null;
+}
+function baselineMaterials(){ return loadUserMaterials() || DEFAULT_MATERIALS.map(m => ({...m})); }
 
 /* ---------- Zustand ---------- */
 let mesh = null;
-let materials = DEFAULT_MATERIALS.map(m => ({...m}));
+let materials = baselineMaterials();
 let matIdx = 0;
 let customColors = [];
 let color = {n:PALETTE[0][0], c:PALETTE[0][1]};
@@ -727,11 +748,16 @@ function render(){
   $("rPer").textContent = (r.qty>1 ? eur(r.gross/r.qty)+" pro Stück · " : "")
                         + "inkl. "+num(r.vat,0)+" % MwSt.";
 
-  const over = r.size.some(v => v > 256);
+  // Bauraum frei konfigurierbar; ein Drehen um 90° in der XY-Ebene darf das Teil passend machen,
+  // deshalb Grundfläche sortiert gegen die sortierte Bett-Grundfläche prüfen, Höhe separat.
+  const bed = [ +$("bx").value||1e9, +$("by").value||1e9, +$("bz").value||1e9 ];
+  const foot = [r.size[0], r.size[1]].sort((a,b) => a-b);
+  const bedFoot = [bed[0], bed[1]].sort((a,b) => a-b);
+  const over = foot[0] > bedFoot[0] || foot[1] > bedFoot[1] || r.size[2] > bed[2];
   const w = $("warn");
   w.className = "warnbox" + (over ? " show" : "");
   if (over) w.textContent = "Das Teil überschreitet mit "+r.size.map(v=>num(v,0)).join(" × ")
-    +" mm den Bauraum von 256 × 256 × 256 mm. Skalierung reduzieren oder Teil zerlegen.";
+    +" mm den Bauraum von "+bed.map(v=>num(v,0)).join(" × ")+" mm. Skalierung reduzieren, Teil drehen oder zerlegen.";
 }
 
 /* ---------- 3D-Vorschau ---------- */
@@ -897,9 +923,19 @@ $("btnMatAdd").onclick = () => {
   const last = $("matRows").lastElementChild.querySelector("input");
   last.focus(); last.select();
 };
+$("btnMatSave").onclick = () => {
+  let ok = false;
+  try { localStorage.setItem(MATERIALS_KEY, JSON.stringify(materials)); ok = true; } catch(e){}
+  flash($("btnMatSave"), ok ? "Gemerkt ✓" : "Nicht gespeichert");
+};
 $("btnMatReset").onclick = () => {
+  materials = baselineMaterials(); matIdx = 0;
+  syncMatSelect(); drawMatRows(); render();
+};
+$("btnMatFactory").onclick = () => {
   materials = DEFAULT_MATERIALS.map(m=>({...m})); matIdx = 0;
   syncMatSelect(); drawMatRows(); render();
+  flash($("btnMatFactory"), "Marktwerte geladen ✓");
 };
 
 /* ---------- Farbe ---------- */
@@ -932,12 +968,12 @@ $("support").onclick = () => {
   $("supBox").style.display = on ? "block" : "none";
   render();
 };
-["walls","qty","scale","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat"]
+["walls","qty","scale","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz"]
   .forEach(id => $(id).addEventListener("input", render));
 
 /* ---------- Speichern / Laden ---------- */
 const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","walls","qty","scale",
-                "supPct","pWatt","pKwh","pMachine","pSetup","pMargin","pVat"];
+                "supPct","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz"];
 
 function snapshot(){
   const d = { v:2, saved:new Date().toISOString(), color, materials, matIdx, customColors,
@@ -971,8 +1007,21 @@ $("btnLoad").onclick = () => {
   inp.click();
 };
 
+// v1 legte die Einstellungen vermutlich flach ab (statt unter d.fields). Best-effort-Migration:
+// alles übernehmen, was sich zuordnen lässt; der Rest fällt auf die Standardwerte zurück.
+function migrateV1(d){
+  const src = d.fields || d;
+  const out = { v:2, color:d.color, materials:d.materials, matIdx:d.matIdx,
+                customColors:d.customColors || [], support:d.support, fields:{} };
+  FIELDS.forEach(f => { if (src[f] !== undefined) out.fields[f] = src[f]; });
+  if (d.mesh) out.mesh = d.mesh;
+  return out;
+}
+
 function applyState(d){
-  if (!d || d.v !== 2) throw new Error("Unbekanntes Dateiformat.");
+  if (!d || typeof d !== "object") throw new Error("Unbekanntes Dateiformat.");
+  if (d.v === 1) d = migrateV1(d);
+  else if (d.v !== 2) throw new Error("Dieser Stand stammt aus einer neueren Version (v"+d.v+"). Bitte die Anwendung aktualisieren.");
   FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
   if (Array.isArray(d.materials) && d.materials.length) materials = d.materials.map(m=>({...m}));
   matIdx = Math.min(d.matIdx ?? 0, materials.length-1);
