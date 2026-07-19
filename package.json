@@ -1,0 +1,11 @@
+{
+  "name": "3d-druck-auftraege",
+  "private": true,
+  "description": "Lokale 3D-Druck-Auftragserfassung — eine einzige HTML-Datei, kein Server",
+  "scripts": {
+    "test": "node tests/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
