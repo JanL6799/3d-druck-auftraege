@@ -34,6 +34,42 @@ lokalen Doppelklick-Nutzung. Setup:
   dem Pi nötig.
 - **Update nach Codeänderung:** `index.html` liegt nicht automatisch aktuell im Webroot, nach
   `git pull` manuell nachziehen: `sudo cp index.html /var/www/drucken.luetje.me/index.html`.
+- **Backup-Server** (`server/backup-server.js`, systemd-Dienst `druckauftrag-backup`, nur
+  `127.0.0.1:8181`): nimmt `POST /api/backup` mit der aktuellen Auftragsliste entgegen
+  (`persistOrders()` in `index.html` ruft das bei jeder Änderung mit) und schreibt sie nach
+  `/var/backups/druckauftrag/` (`latest.json` + eine Tageskopie). nginx leitet `/api/backup`
+  dahin weiter. `X-Backup-Secret` ist **kein echtes Geheimnis** — die App ist eine öffentliche,
+  clientseitige Seite, der Wert steht im Quelltext und im öffentlichen GitHub-Repo. Er bremst
+  nur zufälliges Abgreifen durch Bots, kein Schutz gegen gezielte Angriffe. Setup auf dem Pi:
+  ```
+  sudo mkdir -p /var/backups/druckauftrag
+  sudo chown jan:jan /var/backups/druckauftrag
+  ```
+  systemd-Unit `/etc/systemd/system/druckauftrag-backup.service`:
+  ```
+  [Unit]
+  Description=Backup-Server für die 3D-Druck-Auftragsliste
+  After=network.target
+
+  [Service]
+  ExecStart=/usr/bin/node /home/jan/3d-druck-auftraege/server/backup-server.js
+  Environment=BACKUP_SECRET=<gleicher Wert wie BACKUP_SECRET in index.html>
+  Environment=BACKUP_DIR=/var/backups/druckauftrag
+  Restart=on-failure
+  User=jan
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  nginx-Ergänzung in `/etc/nginx/sites-available/drucken.luetje.me` (vor der `location /`):
+  ```
+  location /api/backup {
+      proxy_pass http://127.0.0.1:8181/backup;
+      client_max_body_size 25m;
+  }
+  ```
+  Danach `sudo systemctl daemon-reload && sudo systemctl enable --now druckauftrag-backup`
+  und `sudo systemctl reload nginx`.
 
 **Kein `build_standalone.py` wie in den anderen Ordnern.** Diese Seite wurde von vornherein als
 vollständiges HTML-Dokument mit eigenem `<head>` geschrieben, nicht als Artifact-Quelle. Sie hat

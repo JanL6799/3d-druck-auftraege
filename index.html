@@ -528,6 +528,11 @@ const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
 const MESHES_KEY = "druckauftrag.meshes.v1";
 const ORDER_STATUS = ["offen","gedruckt","versendet","bezahlt"];
+// Server-seitiges Backup der Auftragsliste auf dem Pi (siehe server/backup-server.js).
+// X-Backup-Secret ist kein echtes Geheimnis — steht im öffentlichen Quelltext dieser Seite —
+// sondern nur eine Hürde gegen zufälliges Abgreifen durch Bots.
+const BACKUP_URL = "/api/backup";
+const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
 
 /* ---------- Zustand ---------- */
 let mesh = null;
@@ -1315,8 +1320,20 @@ function loadOrders(){
   if (!Array.isArray(orders)) orders = [];
 }
 function persistOrders(){
-  try { localStorage.setItem(ORDERS_KEY, JSON.stringify(orders)); return true; }
+  try { localStorage.setItem(ORDERS_KEY, JSON.stringify(orders)); backupOrders(); return true; }
   catch(e){ return false; }
+}
+// Fire-and-forget: läuft nur mit, wenn der Backup-Server auf dem Pi erreichbar ist
+// (z.B. beim lokalen Doppelklick-Öffnen von index.html nicht — dann schlägt fetch() einfach
+// lautlos fehl, ohne die App zu beeinträchtigen).
+function backupOrders(){
+  try {
+    fetch(BACKUP_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
+      body: JSON.stringify({ saved:new Date().toISOString(), orders })
+    }).catch(()=>{});
+  } catch(e){}
 }
 function newId(){
   return (crypto.randomUUID ? crypto.randomUUID() : "o"+Date.now()+Math.random().toString(16).slice(2));

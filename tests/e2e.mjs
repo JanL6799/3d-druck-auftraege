@@ -214,6 +214,21 @@ await test('CSV-Import: 3 Aufträge, Duplikate und Leerzeilen gefiltert', async 
   assert.equal(await page.$$eval('.oitem', els => els.length), 3);
 });
 
+await test('Auftragsänderung löst Server-Backup-Versuch aus (fire-and-forget)', async () => {
+  const call = await page.evaluate(() => {
+    const orig = window.fetch;
+    let captured = null;
+    window.fetch = (url, opts) => { captured = { url, opts }; return Promise.reject(new Error('kein Server im Test')); };
+    persistOrders();
+    window.fetch = orig;
+    return captured;
+  });
+  assert.equal(call.url, '/api/backup');
+  assert.match(call.opts.headers['X-Backup-Secret'], /^[0-9a-f]{10,}$/);
+  const body = JSON.parse(call.opts.body);
+  assert.ok(Array.isArray(body.orders));
+});
+
 await test('Auftrag anklicken lädt Bestellnummer und Käufer', async () => {
   await page.locator('.oitem', { hasText: '88-00011-22233' }).click();
   assert.equal(await page.inputValue('#orderId'), '88-00011-22233');
