@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impressum — 3D-Druck Auftragserfassung</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --panel:#fff; --line-soft:#e8e8ed;
+    --text:#1d1d1f; --muted:#6e6e73; --accent:#0071e3;
+    --r:18px; --shadow:0 1px 3px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.06);
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#000; --panel:#1d1d1f; --line-soft:#2c2c2e;
+      --text:#f5f5f7; --muted:#98989d; --accent:#2997ff;
+      --shadow:0 1px 3px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:17px/1.55 var(--font);
+       letter-spacing:-.01em}
+  .wrap{max-width:640px;margin:0 auto;padding:48px 20px 80px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .back{display:inline-block;margin-bottom:22px;font-size:15px}
+  h1{font-size:28px;letter-spacing:-.02em;margin:0 0 26px}
+  .card{background:var(--panel);border-radius:var(--r);padding:26px 28px;box-shadow:var(--shadow);
+        margin-bottom:20px}
+  h2{font-size:16px;margin:0 0 10px;letter-spacing:-.01em}
+  p{margin:0 0 4px}
+  .muted{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">&larr; Zurück zur Auftragserfassung</a>
+  <h1>Impressum</h1>
+
+  <div class="card">
+    <h2>Angaben gemäß § 5 TMG</h2>
+    <p>Jan Lütje</p>
+    <p>Bussardweg 5</p>
+    <p>26209 Hatten</p>
+  </div>
+
+  <div class="card">
+    <h2>Kontakt</h2>
+    <p>E-Mail: <a href="mailto:jan@luetje.me">jan@luetje.me</a></p>
+  </div>
+
+  <div class="card">
+    <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
+    <p>Jan Lütje (Anschrift wie oben)</p>
+  </div>
+
+  <p class="muted">Diese Anwendung wird privat betrieben, kein Gewerbe angemeldet.</p>
+</div>
+</body>
+</html>
