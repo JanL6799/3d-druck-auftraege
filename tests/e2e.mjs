@@ -297,6 +297,15 @@ await test('v1-Stand lädt (Migration), neuere Version wird abgelehnt', async ()
   assert.match(msg, /neueren Version/);
 });
 
+await test('Darstellung-Toggle merkt sich die Wahl über einen Reload', async () => {
+  const before = await page.evaluate(() => document.documentElement.dataset.theme || null);
+  await page.click('#btnTheme');
+  const after = await page.evaluate(() => document.documentElement.dataset.theme);
+  assert.notEqual(after, before);
+  await page.reload();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), after);
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });
