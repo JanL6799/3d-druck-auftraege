@@ -131,6 +131,7 @@ await test('Slicer-Zeit übersteuert die Schätzung', async () => {
 
 await test('Bauraum-Warnung berücksichtigt 90°-Drehung', async () => {
   await loadStl(boxSTL(25,10,5), 'brick.stl');
+  await page.click('#btnCalcBase');           // Kalkulationsbasis ist standardmäßig eingeklappt
   const setBed = async (x,y,z) => {
     for (const [id,v] of [['bx',x],['by',y],['bz',z]]) await page.fill('#'+id, String(v));
   };

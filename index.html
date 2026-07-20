@@ -83,6 +83,9 @@
   button.primary:hover{filter:brightness(1.1)}
   button.sm{font-size:13px;padding:6px 13px}
   button.link{border:none;background:none;color:var(--accent);padding:4px 0;font-size:14px}
+  button.chev{border:none;background:none;color:var(--accent);font-size:18px;line-height:1;
+              padding:4px 8px;cursor:pointer;transition:transform .15s}
+  button.chev.open{transform:rotate(90deg)}
   button.link:hover{background:none;text-decoration:underline}
   .stack{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
 
@@ -138,8 +141,11 @@
   .sw.on::after{content:"";position:absolute;inset:0;border-radius:50%}
   .colorname{margin-top:12px;font-size:14px}
   .colorname b{font-weight:550}
-  .addcolor{display:grid;grid-template-columns:46px 1fr auto;gap:9px;align-items:center;margin-top:14px}
-  .addcolor input[type=color]{padding:2px;height:38px;cursor:pointer;background:var(--panel2)}
+  .palgroup{margin-top:16px}
+  .palgroup:first-child{margin-top:0}
+  .palhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .palhead .name{font-size:13px;font-weight:600}
+  .palhead .price{font-size:12px;color:var(--muted)}
 
   /* Materialtabelle */
   .mtable{margin-top:8px;border:1px solid var(--line-soft);border-radius:12px;overflow:hidden}
@@ -253,32 +259,6 @@
 <div class="wrap">
   <!-- LINKS -->
   <div>
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-        <div>
-          <h3 style="margin:0">Aufträge</h3>
-          <p class="sub" style="margin:2px 0 0">Alle Aufträge liegen lokal in diesem Browser.</p>
-        </div>
-        <div class="stack">
-          <button class="sm" id="btnImport">CSV importieren</button>
-          <button class="sm" id="btnOrderNew">Neu</button>
-          <button class="primary sm" id="btnOrderSave">Sichern</button>
-        </div>
-      </div>
-      <div style="margin-top:18px">
-        <div class="obar">
-          <input id="oSearch" placeholder="Suchen: Bestellnummer, Käufer, Plattform …">
-        </div>
-        <div class="fchips" id="oChips"></div>
-        <div id="orderList"></div>
-        <div class="stack" style="margin-top:14px">
-          <button class="sm" id="btnBackup">Backup exportieren</button>
-          <button class="sm" id="btnRestore">Backup laden</button>
-          <button class="sm" id="btnCsvOut">Umsatz-CSV</button>
-        </div>
-      </div>
-    </div>
-
     <div class="card">
       <h3>Modelldatei</h3>
       <p class="sub">STL oder 3MF — beide direkt aus jedem FDM-Slicer.</p>
@@ -407,15 +387,9 @@
 
     <div class="card">
       <h3>Farbe</h3>
-      <p class="sub">Palette oder eigene Farbe anlegen.</p>
-      <div class="swatches" id="swatches"></div>
+      <p class="sub">Nur Bambu-Lab-Farben — das ist alles, was gekauft und gedruckt werden kann.</p>
+      <div id="paletteGroups"></div>
       <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
-      <label>Eigene Farbe hinzufügen</label>
-      <div class="addcolor">
-        <input type="color" id="newHex" value="#e8b923">
-        <input id="newName" placeholder="Name, z. B. Senfgelb">
-        <button class="sm" id="btnColAdd">Anlegen</button>
-      </div>
     </div>
 
     <div class="card">
@@ -439,31 +413,66 @@
     </div>
 
     <div class="card">
-      <h3>Kalkulationsbasis</h3>
-      <p class="sub">Deine Betriebskosten.</p>
-      <div class="row">
-        <div><label for="pWatt">Drucker-Leistung W</label><input id="pWatt" type="number" step="5" min="0" value="120"></div>
-        <div><label for="pKwh">Strompreis €/kWh</label><input id="pKwh" type="number" step="0.01" min="0" value="0.25"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <h3 style="margin:0">Kalkulationsbasis</h3>
+          <p class="sub" style="margin:2px 0 0">Deine Betriebskosten.</p>
+        </div>
+        <button class="chev" id="btnCalcBase" aria-label="Kalkulationsbasis ein-/ausklappen" aria-expanded="false">▸</button>
       </div>
-      <div class="row">
-        <div><label for="pMachine">Maschine €/h</label><input id="pMachine" type="number" step="0.5" min="0" value="2.5"></div>
-        <div><label for="pSetup">Rüsten €</label><input id="pSetup" type="number" step="0.5" min="0" value="3"></div>
+      <div id="calcBaseBody" style="display:none">
+        <div class="row">
+          <div><label for="pWatt">Drucker-Leistung W</label><input id="pWatt" type="number" step="5" min="0" value="120"></div>
+          <div><label for="pKwh">Strompreis €/kWh</label><input id="pKwh" type="number" step="0.01" min="0" value="0.25"></div>
+        </div>
+        <div class="row">
+          <div><label for="pMachine">Maschine €/h</label><input id="pMachine" type="number" step="0.5" min="0" value="2.5"></div>
+          <div><label for="pSetup">Rüsten €</label><input id="pSetup" type="number" step="0.5" min="0" value="3"></div>
+        </div>
+        <div class="row">
+          <div><label for="pMargin">Marge %</label><input id="pMargin" type="number" step="5" value="40"></div>
+          <div><label for="pVat">MwSt. %</label><input id="pVat" type="number" step="1" min="0" value="19"></div>
+        </div>
+        <label style="margin-bottom:6px">Bauraum deines Druckers (mm)</label>
+        <div class="row3">
+          <div><input id="bx" type="number" min="10" step="1" value="256" aria-label="Bauraum X"></div>
+          <div><input id="by" type="number" min="10" step="1" value="256" aria-label="Bauraum Y"></div>
+          <div><input id="bz" type="number" min="10" step="1" value="256" aria-label="Bauraum Z"></div>
+        </div>
+        <p class="hint" style="text-align:left">
+          Strom wird getrennt gerechnet: Leistung × Druckzeit × Preis. In „Maschine €/h“ gehören
+          Abschreibung, Düsen und Wartung — ohne Strom, sonst zählst du ihn doppelt. Der Bauraum
+          steuert die Größenwarnung; ein Drehen um 90° in der Ebene wird dabei berücksichtigt.
+        </p>
       </div>
-      <div class="row">
-        <div><label for="pMargin">Marge %</label><input id="pMargin" type="number" step="5" value="40"></div>
-        <div><label for="pVat">MwSt. %</label><input id="pVat" type="number" step="1" min="0" value="19"></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap" style="grid-template-columns:1fr;padding-top:0">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <h3 style="margin:0">Aufträge</h3>
+        <p class="sub" style="margin:2px 0 0">Alle Aufträge liegen lokal in diesem Browser.</p>
       </div>
-      <label style="margin-bottom:6px">Bauraum deines Druckers (mm)</label>
-      <div class="row3">
-        <div><input id="bx" type="number" min="10" step="1" value="256" aria-label="Bauraum X"></div>
-        <div><input id="by" type="number" min="10" step="1" value="256" aria-label="Bauraum Y"></div>
-        <div><input id="bz" type="number" min="10" step="1" value="256" aria-label="Bauraum Z"></div>
+      <div class="stack">
+        <button class="sm" id="btnImport">CSV importieren</button>
+        <button class="sm" id="btnOrderNew">Neu</button>
+        <button class="primary sm" id="btnOrderSave">Sichern</button>
       </div>
-      <p class="hint" style="text-align:left">
-        Strom wird getrennt gerechnet: Leistung × Druckzeit × Preis. In „Maschine €/h“ gehören
-        Abschreibung, Düsen und Wartung — ohne Strom, sonst zählst du ihn doppelt. Der Bauraum
-        steuert die Größenwarnung; ein Drehen um 90° in der Ebene wird dabei berücksichtigt.
-      </p>
+    </div>
+    <div style="margin-top:18px">
+      <div class="obar">
+        <input id="oSearch" placeholder="Suchen: Bestellnummer, Käufer, Plattform …">
+      </div>
+      <div class="fchips" id="oChips"></div>
+      <div id="orderList"></div>
+      <div class="stack" style="margin-top:14px">
+        <button class="sm" id="btnBackup">Backup exportieren</button>
+        <button class="sm" id="btnRestore">Backup laden</button>
+        <button class="sm" id="btnCsvOut">Umsatz-CSV</button>
+      </div>
     </div>
   </div>
 </div>
@@ -499,22 +508,47 @@ const DEFAULT_MATERIALS = [
   {name:"PETG-CF",    price:52, dens:1.30, speed:0.80}
 ];
 
-const PALETTE = [
-  ["Schwarz","#1a1a1a"],["Anthrazit","#33383d"],["Dunkelgrau","#4f545c"],["Grau","#808080"],
-  ["Silber","#b8bcc2"],["Hellgrau","#d5d7db"],["Weiß","#f7f7f7"],["Naturweiß","#f1ece1"],
-  ["Elfenbein","#e8e0cc"],["Beige","#d9c8a9"],["Sand","#e3d2ac"],["Khaki","#9a8f6b"],
-  ["Bordeaux","#6d1b2f"],["Dunkelrot","#8e1c1c"],["Rot","#d32f2f"],["Feuerrot","#e94141"],
-  ["Signalrot","#ff2d2d"],["Koralle","#ff6f61"],["Rosa","#f48fb1"],["Pink","#ff4d94"],
-  ["Magenta","#c2185b"],["Purpur","#7b1fa2"],["Violett","#9575cd"],["Flieder","#c3aede"],
-  ["Dunkelblau","#0d3c78"],["Marine","#16264a"],["Blau","#1565c0"],["Himmelblau","#2f9ae8"],
-  ["Hellblau","#6ecbf5"],["Babyblau","#a8dcf0"],["Petrol","#00697a"],["Türkis","#00acc1"],
-  ["Mint","#5fcdb0"],["Dunkelgrün","#1b5e20"],["Grün","#2e7d32"],["Grasgrün","#4caf50"],
-  ["Hellgrün","#8bc34a"],["Limette","#c0ea52"],["Neongrün","#b2ff59"],["Oliv","#6b7a2f"],
-  ["Gelb","#fdd835"],["Zitrone","#f7ea5a"],["Bernstein","#ffb300"],["Orange","#f57c00"],
-  ["Signalorange","#ff6f00"],["Braun","#6d4c41"],["Holz","#a1785a"],["Schokolade","#4e342e"],
-  ["Gold","#d4af37"],["Messing","#b5a642"],["Kupfer","#b87333"],["Bronze","#8c7853"],
-  ["Transparent","#dfeef2"],["Milchig","#eceff0"],["Glow Grün","#c8f5b0"],["Galaxy","#2a2545"]
+// Offizielle Bambu-Lab-Farbtabellen (store.bblcdn.com/.eu, Stand 20. Juli 2026).
+// price = grober EU-Richtwert €/kg je Linie, zur Orientierung — bei Bedarf hier anpassen.
+const PALETTE_LINES = [
+  { line:"PLA Basic", price:22, colors:[
+    ["Jade White","#FFFFFF"],["Beige","#F7E6DE"],["Light Gray","#D1D3D5"],["Silver","#A6A9AA"],["Gray","#8E9089"],
+    ["Magenta","#EC008C"],["Pink","#F55A74"],["Hot Pink","#F5547C"],["Orange","#FF6A13"],["Pumpkin Orange","#FF9016"],
+    ["Gold","#E4BD68"],["Sunflower Yellow","#FEC600"],["Yellow","#F4EE2A"],["Bright Green","#BECF00"],["Bambu Green","#00AE42"],
+    ["Mistletoe Green","#3F8E43"],["Bronze","#847D48"],["Cocoa Brown","#6F5034"],["Brown","#9D432C"],["Maroon Red","#9D2235"],
+    ["Red","#C12E1F"],["Turquoise","#00B1B7"],["Cyan","#0086D6"],["Blue","#0A2989"],["Cobalt Blue","#0056B8"],
+    ["Purple","#5E43B7"],["Indigo Purple","#482960"],["Blue Grey","#5B6579"],["Dark Gray","#545454"],["Black","#000000"]
+  ]},
+  { line:"PLA Matte", price:23, colors:[
+    ["Ivory White","#FFFFFF"],["Bone White","#CBC6B8"],["Desert Tan","#E8DBB7"],["Latte Brown","#D3B7A7"],
+    ["Caramel","#AE835B"],["Terracotta","#B15533"],["Dark Brown","#7D6556"],["Dark Chocolate","#4D3324"],
+    ["Lilac Purple","#AE96D4"],["Sakura Pink","#E8AFCF"],["Mandarin Orange","#F99963"],["Lemon Yellow","#F7D959"],
+    ["Plum","#950051"],["Scarlet Red","#DE4343"],["Dark Red","#BB3D43"],["Dark Green","#68724D"],
+    ["Grass Green","#61C680"],["Apple Green","#C2E189"],["Ice Blue","#A3D8E1"],["Sky Blue","#56B7E6"],
+    ["Marine Blue","#0078BF"],["Dark Blue","#042F56"],["Ash Gray","#9B9EA0"],["Nardo Gray","#757575"],
+    ["Charcoal","#000000"]
+  ]},
+  { line:"PLA-CF", price:32, colors:[
+    ["Burgundy Red","#951E23"],["Iris Purple","#69398E"],["Matcha Green","#5C9748"],
+    ["Jeans Blue","#6E88BC"],["Royal Blue","#2842AD"],["Lava Gray","#4D5054"],["Black","#000000"]
+  ]},
+  { line:"PLA Translucent", price:25, colors:[
+    ["Teal","#009FA1"],["Light Jade","#96D8AF"],["Blue","#0047BB"],["Mellow Yellow","#F5DBAB"],["Purple","#8344B0"],
+    ["Cherry Pink","#F5B6CD"],["Orange","#F74E02"],["Ice Blue","#B8CDE9"],["Red","#B50011"],["Lavender","#B8ACD6"]
+  ]},
+  { line:"PLA Pure", price:24, colors:[
+    ["Pure White","#FFFFFF"],["Absolute Black","#000000"],["Baby Blue","#A4DBE8"],["Milky Pink","#F7CED7"],["Apricot","#FFB673"]
+  ]},
+  { line:"PETG Basic", price:23, colors:[
+    ["Red","#D6001C"],["Yellow","#FCE300"],["Reflex Blue","#001489"],["Black","#000000"],
+    ["Gray","#7F7E83"],["Dark Brown","#4F2C1D"],["White","#FFFFFF"]
+  ]},
+  { line:"PETG-CF", price:23, colors:[
+    ["Brick Red","#9F332A"],["Violet Purple","#583061"],["Indigo Blue","#324585"],
+    ["Malachite Green","#16B08E"],["Black","#000000"],["Titan Gray","#565656"]
+  ]}
 ];
+const PALETTE = PALETTE_LINES.flatMap(g => g.colors.map(([n,c]) => ({n, c, line:g.line, price:g.price})));
 
 const PLATFORM_FEE = { "eBay":0.11, "Etsy":0.095, "Amazon":0.15, "Direktanfrage":0, "Sonstige":0 };
 const NOZZLE = 0.4, FLOW = 8.0;
@@ -538,15 +572,13 @@ function baselineMaterials(){ return loadUserMaterials() || DEFAULT_MATERIALS.ma
 let mesh = null;
 let materials = baselineMaterials();
 let matIdx = 0;
-let customColors = [];
-let color = {n:PALETTE[0][0], c:PALETTE[0][1]};
+let color = {n:PALETTE[0].n, c:PALETTE[0].c};
 let spin = true, rotX = -1.05, rotY = 0.6, zoom = 1, drag = null;
 
 const $ = id => document.getElementById(id);
 const eur = n => n.toLocaleString("de-DE",{style:"currency",currency:"EUR"});
 const num = (n,d=1) => n.toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
 const esc = s => String(s).replace(/[<>&"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
-const allColors = () => PALETTE.map(([n,c])=>({n,c})).concat(customColors);
 
 /* ---------- STL-Parser ---------- */
 function parseSTL(buf){
@@ -1009,6 +1041,12 @@ $("btnMat").onclick = () => {
   $("matBox").style.display = open ? "none" : "block";
   $("btnMat").textContent = open ? "Bearbeiten" : "Fertig";
 };
+$("btnCalcBase").onclick = () => {
+  const open = $("calcBaseBody").style.display === "block";
+  $("calcBaseBody").style.display = open ? "none" : "block";
+  $("btnCalcBase").classList.toggle("open", !open);
+  $("btnCalcBase").setAttribute("aria-expanded", String(!open));
+};
 $("btnMatAdd").onclick = () => {
   materials.push({name:"Neues Material", price:25, dens:1.24, speed:1});
   matIdx = materials.length-1;
@@ -1033,23 +1071,20 @@ $("btnMatFactory").onclick = () => {
 
 /* ---------- Farbe ---------- */
 function drawSwatches(){
-  $("swatches").innerHTML = allColors()
-    .map(o => `<div class="sw${o.c===color.c&&o.n===color.n?" on":""}" data-n="${esc(o.n)}" data-c="${o.c}"
-                    style="background:${o.c}" title="${esc(o.n)}"></div>`).join("");
-  $("swatches").querySelectorAll(".sw").forEach(el => el.onclick = () => {
+  $("paletteGroups").innerHTML = PALETTE_LINES.map(g => `
+    <div class="palgroup">
+      <div class="palhead"><span class="name">${esc(g.line)}</span><span class="price">${eur(g.price)}/kg</span></div>
+      <div class="swatches">
+        ${g.colors.map(([n,c]) => `<div class="sw${c===color.c&&n===color.n?" on":""}" data-n="${esc(n)}" data-c="${c}"
+                    style="background:${c}" title="${esc(n)}"></div>`).join("")}
+      </div>
+    </div>`).join("");
+  $("paletteGroups").querySelectorAll(".sw").forEach(el => el.onclick = () => {
     color = {n:el.dataset.n, c:el.dataset.c}; drawSwatches();
   });
   $("cName").textContent = color.n;
   $("cHex").textContent  = color.c.toUpperCase();
 }
-$("btnColAdd").onclick = () => {
-  const n = $("newName").value.trim() || $("newHex").value.toUpperCase();
-  customColors.push({n, c:$("newHex").value});
-  color = {n, c:$("newHex").value};
-  $("newName").value = "";
-  drawSwatches();
-};
-$("newName").addEventListener("keydown", e => { if (e.key === "Enter") $("btnColAdd").click(); });
 
 /* ---------- Eingaben ---------- */
 $("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
@@ -1069,7 +1104,7 @@ const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","wal
                 "supPct","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
 
 function snapshot(embedMesh = true){
-  const d = { v:2, saved:new Date().toISOString(), color, materials, matIdx, customColors,
+  const d = { v:2, saved:new Date().toISOString(), color, materials, matIdx,
               support:$("support").classList.contains("on"), fields:{} };
   FIELDS.forEach(f => d.fields[f] = $(f).value);
   if (mesh){
@@ -1120,7 +1155,7 @@ $("btnLoad").onclick = () => {
 function migrateV1(d){
   const src = d.fields || d;
   const out = { v:2, color:d.color, materials:d.materials, matIdx:d.matIdx,
-                customColors:d.customColors || [], support:d.support, fields:{} };
+                support:d.support, fields:{} };
   FIELDS.forEach(f => { if (src[f] !== undefined) out.fields[f] = src[f]; });
   if (d.mesh) out.mesh = d.mesh;
   return out;
@@ -1133,7 +1168,6 @@ function applyState(d){
   FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
   if (Array.isArray(d.materials) && d.materials.length) materials = d.materials.map(m=>({...m}));
   matIdx = Math.min(d.matIdx ?? 0, materials.length-1);
-  customColors = Array.isArray(d.customColors) ? d.customColors : [];
   if (d.color && d.color.c) color = d.color;
 
   $("support").classList.toggle("on", !!d.support);

@@ -84,7 +84,10 @@ Build-Skript wie bei PV und E-Auto.
   „Marktwerte laden“ die ursprünglichen Schätzwerte.
 - **Bauraum:** X/Y/Z frei einstellbar (Startwert 256³). Die Größenwarnung berücksichtigt ein
   Drehen um 90° in der Ebene (sortierte Grundfläche gegen sortierte Bett-Grundfläche, Höhe separat).
-- **Farbe:** 56 benannte Töne plus beliebige eigene Farben. Farbe hängt **nicht** am Material.
+- **Farbe:** 90 offizielle Bambu-Lab-Farben (PLA Basic/Matte/CF/Translucent/Pure, PETG Basic/CF),
+  gruppiert nach Linie mit Preis pro kg — bewusst keine eigene Farbe mehr, da nur gekauft und
+  gedruckt werden kann, was Bambu tatsächlich anbietet. Farbe hängt weiterhin **nicht** am
+  Material (unabhängige Auswahl, wie schon zuvor).
 - **Einstellungen:** Füllung, Schichthöhe, Wandlinien, Stückzahl, Skalierung, Stützstruktur
   (Schalter + freier Prozentregler).
 - **PDF:** einseitiges A4-Auftragsblatt mit Vorschaubild über den Druckdialog → „Als PDF sichern“.
@@ -159,6 +162,16 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Vierte Runde (20. Juli 2026):
+
+1. **Farbpalette auf echte Bambu-Lab-Farben umgestellt** (90 Farben aus den offiziellen
+   Hex-Code-Tabellen für PLA Basic, PLA Matte, PLA-CF, PLA Translucent, PLA Pure, PETG Basic,
+   PETG-CF), gruppiert nach Linie mit Preis pro kg. Eigene Farbe anlegen entfernt — es kann nur
+   gedruckt werden, was tatsächlich gekauft werden kann.
+2. **Kalkulationsbasis ist jetzt standardmäßig eingeklappt**, Pfeil-Button klappt sie auf.
+3. **Aufträge-Karte an das Seitenende verschoben**, volle Breite — das Feld, das von Hand
+   ausgefüllt wird, steht nicht mehr ganz oben im Weg.
 
 Dritte Runde (19. Juli 2026, erste im eigenen Repo) — alle zwölf Review-Vorschläge:
 
