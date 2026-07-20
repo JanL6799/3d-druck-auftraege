@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3D-Druck Auftragserfassung</title>
+<script>
+// Vor dem ersten Rendern gesetzt, damit die gespeicherte Theme-Wahl ohne Aufblitzen greift.
+(function(){
+  var t = localStorage.getItem('druckauftrag.theme');
+  if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+})();
+</script>
 <style>
   :root{
     --bg:#f5f5f7; --panel:#fff; --panel2:#fbfbfd; --line:#d2d2d7; --line-soft:#e8e8ed;
@@ -13,12 +20,18 @@
     --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
   }
   @media (prefers-color-scheme: dark){
-    :root{
+    :root:not([data-theme="light"]){
       --bg:#000; --panel:#1d1d1f; --panel2:#242426; --line:#3a3a3c; --line-soft:#2c2c2e;
       --text:#f5f5f7; --muted:#98989d; --accent:#2997ff; --accent-soft:#12263c;
       --warn:#ff9f45; --warn-bg:#2b1d10; --warn-line:#4a3520;
       --shadow:0 1px 3px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
     }
+  }
+  :root[data-theme="dark"]{
+    --bg:#000; --panel:#1d1d1f; --panel2:#242426; --line:#3a3a3c; --line-soft:#2c2c2e;
+    --text:#f5f5f7; --muted:#98989d; --accent:#2997ff; --accent-soft:#12263c;
+    --warn:#ff9f45; --warn-bg:#2b1d10; --warn-line:#4a3520;
+    --shadow:0 1px 3px rgba(0,0,0,.5), 0 8px 28px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html{-webkit-font-smoothing:antialiased}
@@ -29,7 +42,8 @@
   header{position:sticky;top:0;z-index:50;height:52px;display:flex;align-items:center;gap:16px;
          padding:0 22px;background:rgba(251,251,253,.72);backdrop-filter:saturate(180%) blur(20px);
          -webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line-soft)}
-  @media (prefers-color-scheme: dark){ header{background:rgba(29,29,31,.72)} }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) header{background:rgba(29,29,31,.72)} }
+  :root[data-theme="dark"] header{background:rgba(29,29,31,.72)}
   header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:-.02em;white-space:nowrap}
   header .sp{flex:1}
   .chip{font-size:12px;font-weight:500;padding:4px 11px;border-radius:100px;background:var(--accent-soft);
@@ -123,13 +137,15 @@
   canvas{width:100%;height:400px;display:block;border-radius:14px;cursor:grab;touch-action:none;
          background:radial-gradient(120% 120% at 50% 0%,#dcdee2 0%,#b9bcc3 100%)}
   @media (prefers-color-scheme: dark){
-    canvas{background:radial-gradient(120% 120% at 50% 0%,#3a3a3d 0%,#1c1c1e 100%)}
+    :root:not([data-theme="light"]) canvas{background:radial-gradient(120% 120% at 50% 0%,#3a3a3d 0%,#1c1c1e 100%)}
   }
+  :root[data-theme="dark"] canvas{background:radial-gradient(120% 120% at 50% 0%,#3a3a3d 0%,#1c1c1e 100%)}
   canvas:active{cursor:grabbing}
   .vtools{position:absolute;top:11px;right:11px;display:flex;gap:7px}
   .vtools button{padding:5px 12px;font-size:13px;background:rgba(255,255,255,.75);
         backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:transparent}
-  @media (prefers-color-scheme: dark){ .vtools button{background:rgba(50,50,54,.75)} }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .vtools button{background:rgba(50,50,54,.75)} }
+  :root[data-theme="dark"] .vtools button{background:rgba(50,50,54,.75)}
   .hint{font-size:12px;color:var(--muted);margin-top:10px;text-align:center}
 
   /* Farben */
@@ -233,8 +249,10 @@
   <span class="chip" id="stateBadge">Kein Modell</span>
   <span class="sp"></span>
   <div class="stack">
+    <button id="btnTheme" class="sm" aria-label="Darstellung umschalten" title="Darstellung umschalten">🌙</button>
     <button id="btnSave" class="sm"><span class="wide">Stand speichern</span><span class="narrow">Speichern</span></button>
     <button id="btnLoad" class="sm"><span class="wide">Stand laden</span><span class="narrow">Laden</span></button>
+    <button id="btnMail" class="sm"><span class="wide">Per Mail senden</span><span class="narrow">Mail</span></button>
     <button id="btnPdf" class="primary sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
   </div>
 </header>
@@ -337,7 +355,6 @@
         <tr><td id="lElec">Strom</td><td id="rElec">–</td></tr>
         <tr><td>Maschinenzeit</td><td id="rMach">–</td></tr>
         <tr><td>Rüsten &amp; Nacharbeit</td><td id="rSetup">–</td></tr>
-        <tr><td id="lPlat">Plattformgebühr</td><td id="rPlat">–</td></tr>
         <tr class="total"><td>Preis brutto</td><td id="rTotal">–</td></tr>
       </table>
       <div class="hint" id="rPer" style="text-align:right"></div>
@@ -506,7 +523,6 @@ const PALETTE_LINES = [
 const PALETTE = PALETTE_LINES.flatMap(g =>
   g.colors.map(([n,c]) => ({n, c, line:g.line, price:g.price, dens:g.dens, speed:g.speed})));
 
-const PLATFORM_FEE = { "eBay":0.11, "Etsy":0.095, "Amazon":0.15, "Direktanfrage":0, "Sonstige":0 };
 const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
@@ -522,6 +538,24 @@ const $ = id => document.getElementById(id);
 const eur = n => n.toLocaleString("de-DE",{style:"currency",currency:"EUR"});
 const num = (n,d=1) => n.toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d});
 const esc = s => String(s).replace(/[<>&"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+
+/* ---------- Darstellung (hell/dunkel) ---------- */
+const THEME_KEY = "druckauftrag.theme";
+function applyTheme(t){
+  if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  $("btnTheme").textContent = dark ? "☀️" : "🌙";
+}
+applyTheme(localStorage.getItem(THEME_KEY));
+$("btnTheme").onclick = () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+};
 
 /* ---------- STL-Parser ---------- */
 function parseSTL(buf){
@@ -802,21 +836,18 @@ function calc(){
   const cSet  = +$("pSetup").value||0;
   const net1  = (cMat + cElec + cMach) * (1 + (+$("pMargin").value||0)/100) + cSet;
 
-  const feeRate = PLATFORM_FEE[$("platform").value] ?? 0;
   const netQty  = net1 * qty;
-  const withFee = feeRate < 1 ? netQty/(1-feeRate) : netQty;
-  const fee     = withFee - netQty;
   const vat     = +$("pVat").value||0;
-  const gross   = withFee * (1 + vat/100);
+  const gross   = netQty * (1 + vat/100);
 
   return {vol,grams,hours,size,cMat:cMat*qty,cElec:cElec*qty,cMach:cMach*qty,cSet:cSet*qty,
-          fee,gross,qty,feeRate,vat,mat,infill,layer,walls,supOn,supPct,slicer:slicerH!==null};
+          gross,qty,vat,mat,infill,layer,walls,supOn,supPct,slicer:slicerH!==null};
 }
 
 function render(){
   const r = calc();
   const set = (id,v) => $(id).textContent = v;
-  const ids = ["rVol","rMass","rTime","rDim","rMat","rElec","rMach","rSetup","rPlat","rTotal"];
+  const ids = ["rVol","rMass","rTime","rDim","rMat","rElec","rMach","rSetup","rTotal"];
   if (!r){ ids.forEach(i=>set(i,"–")); $("rPer").textContent=""; return; }
 
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
@@ -830,8 +861,6 @@ function render(){
   set("rElec", eur(r.cElec));
   set("rMach", eur(r.cMach));
   set("rSetup",eur(r.cSet));
-  set("lPlat", "Plattformgebühr"+(r.feeRate?" ("+num(r.feeRate*100,1)+" %)":""));
-  set("rPlat", r.feeRate ? eur(r.fee) : "–");
   set("rTotal",eur(r.gross));
   $("rPer").textContent = (r.qty>1 ? eur(r.gross/r.qty)+" pro Stück · " : "")
                         + "inkl. "+num(r.vat,0)+" % MwSt.";
@@ -1177,7 +1206,6 @@ $("btnPdf").onclick = () => {
           ${row("Strom ("+num(+g("pWatt")||0,0)+" W · "+num(+g("pKwh")||0,2)+" €/kWh)", eur(r.cElec))}
           ${row("Maschinenzeit", eur(r.cMach))}
           ${row("Rüsten &amp; Nacharbeit", eur(r.cSet))}
-          ${r.feeRate ? row("Plattformgebühr ("+num(r.feeRate*100,1)+" %)", eur(r.fee)) : ""}
           ${row("MwSt. "+num(r.vat,0)+" %", eur(r.gross - r.gross/(1+r.vat/100)))}
         </table>
         <div class="tot">Gesamt ${eur(r.gross)}</div>
@@ -1187,6 +1215,43 @@ $("btnPdf").onclick = () => {
     ${g("notes") ? `<h4>Notizen</h4><div>${esc(g("notes")).replace(/\n/g,"<br>")}</div>` : ""}
   `;
   print();
+};
+
+/* ---------- Per Mail senden ---------- */
+// Reiner mailto:-Link — öffnet das eigene Mailprogramm mit fertigem Entwurf an Jan selbst
+// (Merkzettel/Beleg), kein Versand über einen externen Dienst nötig.
+const MAIL_TO = "jan@luetje.me";
+$("btnMail").onclick = () => {
+  const r = calc();
+  if (!r){ const w=$("warn"); w.className="warnbox show";
+           w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
+           return; }
+  const g = id => $(id).value.trim();
+  const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
+  const lines = [
+    `Plattform: ${g("platform")}`,
+    `Bestellnummer: ${g("orderId") || "–"}`,
+    `Käufer: ${g("buyer") || "–"}`,
+    `Liefern bis: ${g("due") ? new Date(g("due")).toLocaleDateString("de-DE") : "–"}`,
+    `Stückzahl: ${r.qty}`,
+    "",
+    `Datei: ${mesh.name}`,
+    `Material: ${r.mat.line||"–"} · ${eur(+r.mat.price||0)}/kg`,
+    `Farbe: ${color.n} (${color.c.toUpperCase()})`,
+    `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
+    `Materialbedarf: ${num(r.grams,1)} g / Stück`,
+    `Druckzeit: ${(h?h+" h ":"")+m+" min"}${r.slicer?" · laut Slicer":""} / Stück`,
+    "",
+    `Preis brutto: ${eur(r.gross)}`,
+    r.qty>1 ? `(${eur(r.gross/r.qty)} pro Stück)` : "",
+    "",
+    g("notes") ? `Notizen: ${g("notes")}` : ""
+  ].filter(l => l !== "").join("\n");
+
+  const subject = "3D-Druck Auftrag" + (g("orderId") ? " " + g("orderId") : "");
+  const a = document.createElement("a");
+  a.href = `mailto:${MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
+  a.click();
 };
 
 /* ---------- Auftragsliste ---------- */

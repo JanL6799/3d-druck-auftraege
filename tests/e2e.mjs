@@ -283,6 +283,31 @@ await test('Farbwahl legt Material für die Kalkulation fest', async () => {
   assert.notEqual(cMatAfter, cMatBefore);
 });
 
+await test('Mail-Button baut mailto-Link mit Auftragsdetails an Jan selbst', async () => {
+  const href = await page.evaluate(() => {
+    const orig = document.createElement.bind(document);
+    let captured = null;
+    document.createElement = tag => {
+      const el = orig(tag);
+      if (tag === 'a') el.click = () => { captured = el.href; };
+      return el;
+    };
+    document.getElementById('btnMail').click();
+    document.createElement = orig;
+    return captured;
+  });
+  assert.match(href, /^mailto:jan@luetje\.me\?subject=/);
+  const decoded = decodeURIComponent(href);
+  assert.match(decoded, /Materialbedarf/);
+  assert.match(decoded, /Preis brutto/);
+});
+
+await test('Mail-Button warnt ohne geladenes Modell', async () => {
+  await page.click('#btnClear');
+  await page.click('#btnMail');
+  assert.match(await text('#warn'), /zuerst eine STL- oder 3MF-Datei laden/);
+});
+
 await test('v1-Stand lädt (Migration), neuere Version wird abgelehnt', async () => {
   const v1 = await page.evaluate(() => {
     window.applyState({ v:1, buyer:'altkunde', orderId:'V1-001', infill:'55', qty:'3' });
@@ -295,6 +320,15 @@ await test('v1-Stand lädt (Migration), neuere Version wird abgelehnt', async ()
     try { window.applyState({v:3}); return null; } catch(e){ return e.message; }
   });
   assert.match(msg, /neueren Version/);
+});
+
+await test('Darstellung-Toggle merkt sich die Wahl über einen Reload', async () => {
+  const before = await page.evaluate(() => document.documentElement.dataset.theme || null);
+  await page.click('#btnTheme');
+  const after = await page.evaluate(() => document.documentElement.dataset.theme);
+  assert.notEqual(after, before);
+  await page.reload();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), after);
 });
 
 await test('Keine JS-Fehler im gesamten Lauf', () => {
