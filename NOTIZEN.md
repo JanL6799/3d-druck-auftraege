@@ -16,6 +16,25 @@ CSV-Import, raus geht es per Backup-JSON und Umsatz-CSV.
 | `tests/e2e.mjs` | 16 Playwright-Tests, fahren die App headless durch |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
+## Deployment
+
+Läuft produktiv auf dem Raspberry Pi unter `https://drucken.luetje.me`, zusätzlich zur
+lokalen Doppelklick-Nutzung. Setup:
+
+- **nginx** liefert `index.html` statisch aus `/var/www/drucken.luetje.me/index.html` aus
+  (Port 80, kein PHP/Node dahinter — reine Datei). Nicht direkt aus dem Repo-Checkout im
+  Home-Verzeichnis, weil `/home/jan` `drwx------` ist und `www-data` da nicht durchkäme.
+- **Cloudflare Tunnel** (`cloudflared`, systemd-Dienst, `enabled`) verbindet den Pi ausgehend
+  mit Cloudflare — kein eingehendes Port-Forwarding nötig. Grund: Der Hauptanschluss läuft
+  über Starlink, das hinter Carrier-Grade-NAT sitzt (WAN-IP im `100.64.0.0/10`-Bereich),
+  klassisches Port-Forwarding auf der Router-WAN-IP geht dort ins Leere. Der DSL-Zweitanschluss
+  hängt zusätzlich hinter einem doppelten NAT. Tunnel umgeht beides.
+- **DNS:** `drucken.luetje.me` ist ein CNAME auf den Tunnel (von `cloudflared tunnel route dns`
+  gesetzt), TLS/HTTPS übernimmt Cloudflare am Edge. Kein certbot/Let's-Encrypt-Zertifikat auf
+  dem Pi nötig.
+- **Update nach Codeänderung:** `index.html` liegt nicht automatisch aktuell im Webroot, nach
+  `git pull` manuell nachziehen: `sudo cp index.html /var/www/drucken.luetje.me/index.html`.
+
 **Kein `build_standalone.py` wie in den anderen Ordnern.** Diese Seite wurde von vornherein als
 vollständiges HTML-Dokument mit eigenem `<head>` geschrieben, nicht als Artifact-Quelle. Sie hat
 keine externen Abhängigkeiten: STL-/3MF-Parser, 3D-Renderer und PDF-Ausgabe sind selbst
