@@ -29,14 +29,6 @@ Status (offen → gedruckt → versendet → bezahlt), Suche und Filter.
 
 Details zu Rechenmodell, Grenzen und Entscheidungen: [`NOTIZEN.md`](NOTIZEN.md).
 
-## Tests
-
-```bash
-npm install
-npx playwright install chromium
-npm test
-```
-
 16 Ende-zu-Ende-Tests fahren die App headless durch: Volumenberechnung (STL + 3MF),
 Wasserdichtheits- und Bauraum-Warnung, CSV-Import, Auftragsliste, Backup, Migration.
 Sie laufen bei jedem Push automatisch über GitHub Actions.
