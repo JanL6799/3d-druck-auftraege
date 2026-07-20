@@ -382,7 +382,7 @@
         </div>
         <div class="row">
           <div><label for="pMachine">Maschine €/h</label><input id="pMachine" type="number" step="0.5" min="0" value="2.5"></div>
-          <div><label for="pSetup">Rüsten €</label><input id="pSetup" type="number" step="0.5" min="0" value="3"></div>
+          <div><label for="pSetup">Rüsten €</label><input id="pSetup" type="number" step="0.5" min="0" value="1.5"></div>
         </div>
         <div class="row">
           <div><label for="pMargin">Marge %</label><input id="pMargin" type="number" step="5" value="40"></div>
@@ -480,10 +480,11 @@
 
 /* ---------- Stammdaten ---------- */
 // Offizielle Bambu-Lab-Farbtabellen (store.bblcdn.com/.eu, Stand 20. Juli 2026).
-// price = grober EU-Richtwert €/kg je Linie; dens/speed = Materialwerte der Linie
-// (speed relativ zu PLA Basic = 1,0) — alles Richtwerte, bei Bedarf hier anpassen.
+// price = EU-Straßenpreis €/kg je Linie (Stand 20. Juli 2026, via Preisvergleich für den
+// Bambu-Lab-EU-Store recherchiert — Normalfarbe, ohne Rabatt/Refill/Mengenrabatt). dens/speed
+// = Materialwerte der Linie (speed relativ zu PLA Basic = 1,0), grobe Richtwerte.
 const PALETTE_LINES = [
-  { line:"PLA Basic", price:22, dens:1.24, speed:1.00, colors:[
+  { line:"PLA Basic", price:22.99, dens:1.24, speed:1.00, colors:[
     ["Jade White","#FFFFFF"],["Beige","#F7E6DE"],["Light Gray","#D1D3D5"],["Silver","#A6A9AA"],["Gray","#8E9089"],
     ["Magenta","#EC008C"],["Pink","#F55A74"],["Hot Pink","#F5547C"],["Orange","#FF6A13"],["Pumpkin Orange","#FF9016"],
     ["Gold","#E4BD68"],["Sunflower Yellow","#FEC600"],["Yellow","#F4EE2A"],["Bright Green","#BECF00"],["Bambu Green","#00AE42"],
@@ -491,7 +492,7 @@ const PALETTE_LINES = [
     ["Red","#C12E1F"],["Turquoise","#00B1B7"],["Cyan","#0086D6"],["Blue","#0A2989"],["Cobalt Blue","#0056B8"],
     ["Purple","#5E43B7"],["Indigo Purple","#482960"],["Blue Grey","#5B6579"],["Dark Gray","#545454"],["Black","#000000"]
   ]},
-  { line:"PLA Matte", price:23, dens:1.24, speed:1.00, colors:[
+  { line:"PLA Matte", price:22.99, dens:1.24, speed:1.00, colors:[
     ["Ivory White","#FFFFFF"],["Bone White","#CBC6B8"],["Desert Tan","#E8DBB7"],["Latte Brown","#D3B7A7"],
     ["Caramel","#AE835B"],["Terracotta","#B15533"],["Dark Brown","#7D6556"],["Dark Chocolate","#4D3324"],
     ["Lilac Purple","#AE96D4"],["Sakura Pink","#E8AFCF"],["Mandarin Orange","#F99963"],["Lemon Yellow","#F7D959"],
@@ -500,22 +501,22 @@ const PALETTE_LINES = [
     ["Marine Blue","#0078BF"],["Dark Blue","#042F56"],["Ash Gray","#9B9EA0"],["Nardo Gray","#757575"],
     ["Charcoal","#000000"]
   ]},
-  { line:"PLA-CF", price:32, dens:1.20, speed:0.85, colors:[
+  { line:"PLA-CF", price:29.90, dens:1.20, speed:0.85, colors:[
     ["Burgundy Red","#951E23"],["Iris Purple","#69398E"],["Matcha Green","#5C9748"],
     ["Jeans Blue","#6E88BC"],["Royal Blue","#2842AD"],["Lava Gray","#4D5054"],["Black","#000000"]
   ]},
-  { line:"PLA Translucent", price:25, dens:1.24, speed:0.90, colors:[
+  { line:"PLA Translucent", price:25.95, dens:1.24, speed:0.90, colors:[
     ["Teal","#009FA1"],["Light Jade","#96D8AF"],["Blue","#0047BB"],["Mellow Yellow","#F5DBAB"],["Purple","#8344B0"],
     ["Cherry Pink","#F5B6CD"],["Orange","#F74E02"],["Ice Blue","#B8CDE9"],["Red","#B50011"],["Lavender","#B8ACD6"]
   ]},
-  { line:"PLA Pure", price:24, dens:1.24, speed:1.00, colors:[
+  { line:"PLA Pure", price:27.99, dens:1.24, speed:1.00, colors:[
     ["Pure White","#FFFFFF"],["Absolute Black","#000000"],["Baby Blue","#A4DBE8"],["Milky Pink","#F7CED7"],["Apricot","#FFB673"]
   ]},
-  { line:"PETG Basic", price:23, dens:1.27, speed:0.85, colors:[
+  { line:"PETG Basic", price:25.99, dens:1.27, speed:0.85, colors:[
     ["Red","#D6001C"],["Yellow","#FCE300"],["Reflex Blue","#001489"],["Black","#000000"],
     ["Gray","#7F7E83"],["Dark Brown","#4F2C1D"],["White","#FFFFFF"]
   ]},
-  { line:"PETG-CF", price:23, dens:1.25, speed:0.80, colors:[
+  { line:"PETG-CF", price:32.99, dens:1.25, speed:0.80, colors:[
     ["Brick Red","#9F332A"],["Violet Purple","#583061"],["Indigo Blue","#324585"],
     ["Malachite Green","#16B08E"],["Black","#000000"],["Titan Gray","#565656"]
   ]}
@@ -895,27 +896,47 @@ function buildView(){
   const {mn,mx,size} = mesh;
   const c = [ (mn[0]+mx[0])/2, (mn[1]+mx[1])/2, (mn[2]+mx[2])/2 ];
   const k = 1 / Math.max(...size, 1e-6);
-  // Ab ~40.000 Dreiecken wird die Vorschau ausgedünnt (jedes n-te Dreieck), sonst ruckelt der
-  // Painter's Algorithm beim Drehen. Die Kalkulation rechnet immer mit dem vollen Mesh.
   const total = mesh.tris.length/9;
   const MAXT  = 40000;
-  const step  = Math.max(1, Math.ceil(total/MAXT));
-  const count = Math.ceil(total/step);
-  const t = new Float32Array(count*9);
-  let o = 0;
-  for (let tri=0; tri<total; tri+=step){
-    const s = tri*9;
-    for (let v=0; v<9; v+=3){
-      t[o++] = (mesh.tris[s+v]  -c[0])*k;
-      t[o++] = (mesh.tris[s+v+1]-c[1])*k;
-      t[o++] = (mesh.tris[s+v+2]-c[2])*k;
+
+  if (total <= MAXT){
+    const t = new Float32Array(mesh.tris.length);
+    for (let i=0;i<mesh.tris.length;i+=3){
+      t[i]   = (mesh.tris[i]  -c[0])*k;
+      t[i+1] = (mesh.tris[i+1]-c[1])*k;
+      t[i+2] = (mesh.tris[i+2]-c[2])*k;
     }
+    view = t;
+    $("vHint").textContent = "Ziehen zum Drehen · Mausrad zum Zoomen";
+    return;
   }
-  view = t;
-  $("vHint").textContent = step > 1
-    ? "Ziehen zum Drehen · Mausrad zum Zoomen · Vorschau reduziert auf "
-      +count.toLocaleString("de-DE")+" von "+total.toLocaleString("de-DE")+" Dreiecken"
-    : "Ziehen zum Drehen · Mausrad zum Zoomen";
+
+  // Ab ~40.000 Dreiecken wird die Vorschau vereinfacht (Vertex-Clustering: Ecken auf ein
+  // Gitter runden, entartete/doppelte Dreiecke danach verwerfen), sonst ruckelt der Painter's
+  // Algorithm beim Drehen. Bloßes Überspringen jedes n-ten Dreiecks (frühere Version) half bei
+  // feinteiligen Meshes nicht — lauter subpixelkleine Facetten blieben übrig und wirkten wie
+  // ein Punkteraster statt einer erkennbaren Fläche. Das Verschmelzen benachbarter kleiner
+  // Dreiecke zu größeren liefert stattdessen echte, klar sichtbare Facetten. Die Kalkulation
+  // rechnet immer mit dem vollen Mesh, hiervon unberührt.
+  const GRID = 28;
+  const snap = v => Math.round(v*GRID)/GRID;
+  const seen = new Set();
+  const out = [];
+  for (let tri=0; tri<total; tri++){
+    const s = tri*9;
+    const ax=snap((mesh.tris[s]  -c[0])*k), ay=snap((mesh.tris[s+1]-c[1])*k), az=snap((mesh.tris[s+2]-c[2])*k);
+    const bx=snap((mesh.tris[s+3]-c[0])*k), by=snap((mesh.tris[s+4]-c[1])*k), bz=snap((mesh.tris[s+5]-c[2])*k);
+    const cx=snap((mesh.tris[s+6]-c[0])*k), cy=snap((mesh.tris[s+7]-c[1])*k), cz=snap((mesh.tris[s+8]-c[2])*k);
+    if ((ax===bx&&ay===by&&az===bz) || (ax===cx&&ay===cy&&az===cz) || (bx===cx&&by===cy&&bz===cz)) continue;
+    const key = ax+","+ay+","+az+"|"+bx+","+by+","+bz+"|"+cx+","+cy+","+cz;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ax,ay,az, bx,by,bz, cx,cy,cz);
+  }
+  view = new Float32Array(out);
+  const kept = out.length/9;
+  $("vHint").textContent = "Ziehen zum Drehen · Mausrad zum Zoomen · Vorschau vereinfacht auf "
+    +kept.toLocaleString("de-DE")+" von "+total.toLocaleString("de-DE")+" Dreiecken";
 }
 
 const hex2rgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
@@ -923,7 +944,7 @@ const hex2rgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseI
 function draw(){
   const dpr = Math.min(devicePixelRatio||1, 2);
   const W = cv.clientWidth, H = cv.clientHeight;
-  if (cv.width !== Math.round(W*dpr)){ cv.width = W*dpr; cv.height = H*dpr; }
+  if (cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){ cv.width = W*dpr; cv.height = H*dpr; }
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,W,H);
   if (!view) return;

@@ -202,6 +202,21 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
 
 ## Erledigt
 
+Sechste Runde (20. Juli 2026):
+
+1. **3D-Vorschau bei feinteiligen Modellen grundlegend überarbeitet.** Die bisherige
+   Ausdünnung (jedes n-te Dreieck überspringen) half bei Modellen mit sehr feiner Geometrie
+   (viele tausend winzige Facetten, z.B. dünne Lamellen/Rippen) nicht — auch das volle,
+   unausgedünnte Mesh sah identisch "gepunktet" aus, wie ein Vergleich mit dem echten
+   Nutzer-Testmodell (132.636 Dreiecke) zeigte. Ursache: subpixelkleine Dreiecke, kein
+   Ausdünnungs-Bug. Jetzt Vertex-Clustering (Ecken auf ein Gitter runden, entartete/doppelte
+   Dreiecke danach verwerfen) statt stumpfem Überspringen — verschmilzt benachbarte kleine
+   Facetten zu größeren, tatsächlich sichtbaren Flächen. Nebenbei einen echten Bug im
+   Canvas-Resize gefunden und behoben: `draw()` prüfte bisher nur die Breite, nicht die Höhe.
+2. **Rüsten-Standardwert auf 1,50 € gesenkt** (vorher 3 €).
+3. **Bambu-Lab-Preise aktualisiert** auf aktuelle EU-Straßenpreise (Stand 20. Juli 2026,
+   siehe Kommentar im Code für Details/Vorbehalt).
+
 Fünfte Runde (20. Juli 2026):
 
 1. **Bugfix: 3MF-Dateien mit externer Objektdatei wurden als leer abgelehnt**
