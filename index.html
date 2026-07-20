@@ -252,6 +252,7 @@
     <button id="btnTheme" class="sm" aria-label="Darstellung umschalten" title="Darstellung umschalten">🌙</button>
     <button id="btnSave" class="sm"><span class="wide">Stand speichern</span><span class="narrow">Speichern</span></button>
     <button id="btnLoad" class="sm"><span class="wide">Stand laden</span><span class="narrow">Laden</span></button>
+    <button id="btnMail" class="sm"><span class="wide">Per Mail senden</span><span class="narrow">Mail</span></button>
     <button id="btnPdf" class="primary sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
   </div>
 </header>
@@ -1214,6 +1215,43 @@ $("btnPdf").onclick = () => {
     ${g("notes") ? `<h4>Notizen</h4><div>${esc(g("notes")).replace(/\n/g,"<br>")}</div>` : ""}
   `;
   print();
+};
+
+/* ---------- Per Mail senden ---------- */
+// Reiner mailto:-Link — öffnet das eigene Mailprogramm mit fertigem Entwurf an Jan selbst
+// (Merkzettel/Beleg), kein Versand über einen externen Dienst nötig.
+const MAIL_TO = "jan@luetje.me";
+$("btnMail").onclick = () => {
+  const r = calc();
+  if (!r){ const w=$("warn"); w.className="warnbox show";
+           w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
+           return; }
+  const g = id => $(id).value.trim();
+  const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
+  const lines = [
+    `Plattform: ${g("platform")}`,
+    `Bestellnummer: ${g("orderId") || "–"}`,
+    `Käufer: ${g("buyer") || "–"}`,
+    `Liefern bis: ${g("due") ? new Date(g("due")).toLocaleDateString("de-DE") : "–"}`,
+    `Stückzahl: ${r.qty}`,
+    "",
+    `Datei: ${mesh.name}`,
+    `Material: ${r.mat.line||"–"} · ${eur(+r.mat.price||0)}/kg`,
+    `Farbe: ${color.n} (${color.c.toUpperCase()})`,
+    `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
+    `Materialbedarf: ${num(r.grams,1)} g / Stück`,
+    `Druckzeit: ${(h?h+" h ":"")+m+" min"}${r.slicer?" · laut Slicer":""} / Stück`,
+    "",
+    `Preis brutto: ${eur(r.gross)}`,
+    r.qty>1 ? `(${eur(r.gross/r.qty)} pro Stück)` : "",
+    "",
+    g("notes") ? `Notizen: ${g("notes")}` : ""
+  ].filter(l => l !== "").join("\n");
+
+  const subject = "3D-Druck Auftrag" + (g("orderId") ? " " + g("orderId") : "");
+  const a = document.createElement("a");
+  a.href = `mailto:${MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
+  a.click();
 };
 
 /* ---------- Auftragsliste ---------- */
