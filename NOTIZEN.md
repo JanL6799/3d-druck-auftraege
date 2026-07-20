@@ -12,8 +12,9 @@ CSV-Import, raus geht es per Backup-JSON und Umsatz-CSV.
 | Datei | Zweck |
 |---|---|
 | `index.html` | Die komplette Anwendung — Doppelklick genügt |
+| `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup + Mail-Versand), siehe unten |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 16 Playwright-Tests, fahren die App headless durch |
+| `tests/e2e.mjs` | 21 Playwright-Tests, fahren die App headless durch |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -34,13 +35,23 @@ lokalen Doppelklick-Nutzung. Setup:
   dem Pi nötig.
 - **Update nach Codeänderung:** `index.html` liegt nicht automatisch aktuell im Webroot, nach
   `git pull` manuell nachziehen: `sudo cp index.html /var/www/drucken.luetje.me/index.html`.
-- **Backup-Server** (`server/backup-server.js`, systemd-Dienst `druckauftrag-backup`, nur
-  `127.0.0.1:8181`): nimmt `POST /api/backup` mit der aktuellen Auftragsliste entgegen
-  (`persistOrders()` in `index.html` ruft das bei jeder Änderung mit) und schreibt sie nach
-  `/var/backups/druckauftrag/` (`latest.json` + eine Tageskopie). nginx leitet `/api/backup`
-  dahin weiter. `X-Backup-Secret` ist **kein echtes Geheimnis** — die App ist eine öffentliche,
-  clientseitige Seite, der Wert steht im Quelltext und im öffentlichen GitHub-Repo. Er bremst
-  nur zufälliges Abgreifen durch Bots, kein Schutz gegen gezielte Angriffe. Setup auf dem Pi:
+- **API-Server** (`server/api-server.js`, systemd-Dienst `druckauftrag-backup`, nur
+  `127.0.0.1:8181`), zwei Routen:
+  - `POST /api/backup` — aktuelle Auftragsliste (`persistOrders()` ruft das bei jeder Änderung
+    mit) landet unter `/var/backups/druckauftrag/` (`latest.json` + eine Tageskopie).
+  - `POST /api/send-mail` — verschickt die Auftrags-Mail über die **Resend-API**
+    (`https://api.resend.com/emails`) inklusive echtem Dateianhang (Modell als STL, Stand als
+    JSON, jeweils base64 im Request-Body vom Client). Absender `onboarding@resend.dev`
+    (Resend-Testdomain, funktioniert ohne eigene Domain-Verifizierung nur an die eigene
+    Resend-Account-Adresse — reicht, weil immer an `jan@luetje.me` verschickt wird). Für Mails
+    an andere Adressen müsste `luetje.me` erst bei Resend verifiziert werden (DNS-Einträge über
+    Cloudflare).
+
+  nginx leitet beide Pfade weiter. `X-Backup-Secret` ist **kein echtes Geheimnis** — die App ist
+  eine öffentliche, clientseitige Seite, der Wert steht im Quelltext und im öffentlichen
+  GitHub-Repo. Er bremst nur zufälliges Abgreifen durch Bots, kein Schutz gegen gezielte
+  Angriffe. Der **Resend-API-Key dagegen ist ein echtes Geheimnis** und steht nur server-seitig
+  als Umgebungsvariable — niemals im Quelltext oder im Repo committen. Setup auf dem Pi:
   ```
   sudo mkdir -p /var/backups/druckauftrag
   sudo chown jan:jan /var/backups/druckauftrag
@@ -48,13 +59,15 @@ lokalen Doppelklick-Nutzung. Setup:
   systemd-Unit `/etc/systemd/system/druckauftrag-backup.service`:
   ```
   [Unit]
-  Description=Backup-Server für die 3D-Druck-Auftragsliste
+  Description=API-Server für die 3D-Druck-Auftragserfassung (Backup + Mail-Versand)
   After=network.target
 
   [Service]
-  ExecStart=/usr/bin/node /home/jan/3d-druck-auftraege/server/backup-server.js
+  ExecStart=/usr/bin/node /home/jan/3d-druck-auftraege/server/api-server.js
   Environment=BACKUP_SECRET=<gleicher Wert wie BACKUP_SECRET in index.html>
   Environment=BACKUP_DIR=/var/backups/druckauftrag
+  Environment=RESEND_API_KEY=<Resend-API-Key, NICHT ins Repo>
+  Environment=MAIL_TO=jan@luetje.me
   Restart=on-failure
   User=jan
 
@@ -66,6 +79,10 @@ lokalen Doppelklick-Nutzung. Setup:
   location /api/backup {
       proxy_pass http://127.0.0.1:8181/backup;
       client_max_body_size 25m;
+  }
+  location /api/send-mail {
+      proxy_pass http://127.0.0.1:8181/send-mail;
+      client_max_body_size 35m;
   }
   ```
   Danach `sudo systemctl daemon-reload && sudo systemctl enable --now druckauftrag-backup`
@@ -116,21 +133,20 @@ Build-Skript wie bei PV und E-Auto.
   drehbar, zoombar, in der gewählten Filamentfarbe. Ab ~40.000 Dreiecken wird die Vorschau
   ausgedünnt (jedes n-te Dreieck), damit das Drehen flüssig bleibt — die Kalkulation rechnet
   immer mit dem vollen Mesh, und der Hinweis unter dem Canvas zeigt die Reduktion an.
-- **Material:** 10 Filamente als Startwerte, aber Name, €/kg, Dichte und Tempo-Faktor sind alle
-  frei editierbar; anlegen, löschen, zurücksetzen. **Als Standard sichern** legt die eigenen
-  Einkaufspreise dauerhaft in `localStorage` (`druckauftrag.materials.v1`) ab — danach starten
-  neue Aufträge mit Jans Preisen statt den Marktschätzungen, „Zurücksetzen“ holt genau diese,
-  „Marktwerte laden“ die ursprünglichen Schätzwerte.
 - **Bauraum:** X/Y/Z frei einstellbar (Startwert 256³). Die Größenwarnung berücksichtigt ein
   Drehen um 90° in der Ebene (sortierte Grundfläche gegen sortierte Bett-Grundfläche, Höhe separat).
-- **Farbe:** 90 offizielle Bambu-Lab-Farben (PLA Basic/Matte/CF/Translucent/Pure, PETG Basic/CF),
-  gruppiert nach Linie mit Preis pro kg — bewusst keine eigene Farbe mehr, da nur gekauft und
-  gedruckt werden kann, was Bambu tatsächlich anbietet. Farbe hängt weiterhin **nicht** am
-  Material (unabhängige Auswahl, wie schon zuvor).
+- **Material & Farbe:** 90 offizielle Bambu-Lab-Farben (PLA Basic/Matte/CF/Translucent/Pure,
+  PETG Basic/CF), gruppiert nach Linie mit Preis pro kg — bewusst keine eigene Farbe mehr, da
+  nur gekauft und gedruckt werden kann, was Bambu tatsächlich anbietet. Die Farbwahl legt
+  Material (Preis, Dichte, Tempo) und Farbe in einem Schritt fest, keine separate
+  Materialliste mehr.
 - **Einstellungen:** Füllung, Schichthöhe, Wandlinien, Stückzahl, Skalierung.
 - **PDF:** einseitiges A4-Auftragsblatt mit Vorschaubild über den Druckdialog → „Als PDF sichern“.
   Bewusst ohne jsPDF, das wäre eine externe Abhängigkeit.
-- **Zwischenstand:** JSON-Download inklusive Modellgeometrie, eigenen Materialien und Farben.
+- **Mail:** „Per Mail senden“ verschickt Auftrag, Modell (als STL) und Stand direkt über den
+  API-Server auf dem Pi (Resend-API) an Jan — echter Anhang, kein mailto:-Link und kein
+  manueller Download mehr. Siehe „Deployment“ oben.
+- **Zwischenstand:** JSON-Download inklusive Modellgeometrie und Farbe.
   Zusätzlich in `localStorage` (Schlüssel `druckauftrag.v2`) → beim Öffnen ist der letzte Stand da.
 
 ## Rechenmodell
@@ -197,6 +213,17 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Achte Runde (20. Juli 2026):
+
+1. **Mail-Versand auf echten Anhang umgestellt.** mailto: kann technisch keine Anhänge
+   transportieren — die bisherige Download-dann-manuell-anhängen-Lösung war dem Nutzer zu
+   umständlich. `server/backup-server.js` zu `server/api-server.js` erweitert (neue Route
+   `POST /api/send-mail`), verschickt die Mail direkt über die Resend-API mit Modell (STL) und
+   Stand (JSON) als echten Anhängen. Erfordert einen Resend-Account + API-Key (Secret, nur
+   server-seitig als Umgebungsvariable, nie im Repo).
+2. Nebenbei zwei veraltete NOTIZEN-Abschnitte korrigiert, die noch die längst entfernte
+   editierbare Materialliste beschrieben (Rest vom Material-&-Farbe-Merge).
 
 Siebte Runde (20. Juli 2026):
 

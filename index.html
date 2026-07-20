@@ -505,10 +505,12 @@ const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
 const MESHES_KEY = "druckauftrag.meshes.v1";
 const ORDER_STATUS = ["offen","gedruckt","versendet","bezahlt"];
-// Server-seitiges Backup der Auftragsliste auf dem Pi (siehe server/backup-server.js).
-// X-Backup-Secret ist kein echtes Geheimnis — steht im öffentlichen Quelltext dieser Seite —
-// sondern nur eine Hürde gegen zufälliges Abgreifen durch Bots.
+// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js): Auftragsliste sichern
+// und Auftrags-Mail mit echtem Anhang verschicken. X-Backup-Secret ist kein echtes Geheimnis
+// — steht im öffentlichen Quelltext dieser Seite — sondern nur eine Hürde gegen zufälliges
+// Abgreifen durch Bots.
 const BACKUP_URL = "/api/backup";
+const MAIL_API_URL = "/api/send-mail";
 const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
 
 /* ---------- Zustand ---------- */
@@ -1209,18 +1211,18 @@ $("btnPdf").onclick = () => {
 };
 
 /* ---------- Per Mail senden ---------- */
-// Reiner mailto:-Link — öffnet das eigene Mailprogramm mit fertigem Entwurf an Jan selbst
-// (Merkzettel/Beleg), kein Versand über einen externen Dienst nötig. mailto: kann selbst
-// keine Anhänge transportieren (Grenze des URI-Schemas) — Modell und Stand werden deshalb
-// als Dateien heruntergeladen, zum manuellen Anhängen an den bereits vorbereiteten Entwurf.
-const MAIL_TO = "jan@luetje.me";
+// Verschickt die Auftrags-Mail direkt vom Server (server/api-server.js -> Resend-API) mit
+// Modell und Stand als echtem Dateianhang — kein mailto:-Link mehr, der könnte technisch
+// keine Anhänge transportieren (Grenze des URI-Schemas), und keine manuellen Downloads.
 
-function downloadBlob(blob, filename){
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
+// Blob -> reines Base64 (ohne "data:...;base64,"-Präfix), für den JSON-Body an /api/send-mail.
+function blobToBase64(blob){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result.slice(r.result.indexOf(",")+1));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
 }
 
 // STL aus der geladenen Geometrie neu erzeugen — die ursprünglichen Rohbytes des Uploads
@@ -1251,7 +1253,7 @@ function meshToSTLBlob(tris, sourceName){
   return new Blob([buf], {type:"model/stl"});
 }
 
-$("btnMail").onclick = () => {
+$("btnMail").onclick = async () => {
   const r = calc();
   if (!r){ const w=$("warn"); w.className="warnbox show";
            w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
@@ -1260,18 +1262,14 @@ $("btnMail").onclick = () => {
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
 
   const stlName = mesh.name.replace(/\.(stl|3mf)$/i,"") + ".stl";
-  downloadBlob(meshToSTLBlob(mesh.tris, mesh.name), stlName);
   const standName = "stand-"+(g("orderId") || new Date().toISOString().slice(0,10))+".json";
   // Ohne Geometrie — die liegt schon als STL bei, eingebettet wäre der Stand bei großen
   // Modellen mehrere MB groß (jeder Vertex dreifach als Zahl im JSON).
   const stand = snapshot();
   delete stand.mesh; delete stand.meshHash;
   stand.meshFile = stlName;
-  downloadBlob(new Blob([JSON.stringify(stand)],{type:"application/json"}), standName);
 
   const lines = [
-    `Datei: ${stlName} und ${standName} wurden gerade heruntergeladen — bitte beide an diese Mail anhängen.`,
-    "",
     `Material: ${r.mat.line||"–"} · ${eur(+r.mat.price||0)}/kg`,
     `Farbe: ${color.n} (${color.c.toUpperCase()})`,
     `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
@@ -1285,9 +1283,31 @@ $("btnMail").onclick = () => {
   ].filter(l => l !== "").join("\n");
 
   const subject = "3D-Druck Auftrag" + (g("orderId") ? " " + g("orderId") : "");
-  const a = document.createElement("a");
-  a.href = `mailto:${MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
-  a.click();
+  const btn = $("btnMail");
+  const original = btn.innerHTML;
+  btn.disabled = true; btn.textContent = "Sende …";
+  try {
+    const [stlContent, standContent] = await Promise.all([
+      blobToBase64(meshToSTLBlob(mesh.tris, mesh.name)),
+      blobToBase64(new Blob([JSON.stringify(stand)],{type:"application/json"}))
+    ]);
+    const res = await fetch(MAIL_API_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
+      body: JSON.stringify({ subject, text: lines,
+        attachments: [ {filename:stlName, content:stlContent}, {filename:standName, content:standContent} ] })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || ("HTTP "+res.status));
+    btn.innerHTML = original;
+    flash(btn, "Gesendet ✓");
+  } catch (e){
+    btn.innerHTML = original;
+    const w = $("warn"); w.className = "warnbox show";
+    w.textContent = "Mail konnte nicht verschickt werden: "+e.message;
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 /* ---------- Auftragsliste ---------- */
