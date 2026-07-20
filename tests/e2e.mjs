@@ -206,6 +206,7 @@ await test('Bauraum-Warnung berücksichtigt 90°-Drehung', async () => {
 });
 
 await test('CSV-Import: 3 Aufträge, Duplikate und Leerzeilen gefiltert', async () => {
+  await page.click('#btnOrders');           // Aufträge ist standardmäßig eingeklappt
   await page.click('#btnImport');
   await page.fill('#impText', CSV);
   await page.click('#impParse');

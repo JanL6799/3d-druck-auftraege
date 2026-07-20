@@ -121,9 +121,9 @@
   #drop svg{margin-bottom:12px;opacity:.5}
   #viewerBox{position:relative;display:none}
   canvas{width:100%;height:400px;display:block;border-radius:14px;cursor:grab;touch-action:none;
-         background:radial-gradient(120% 120% at 50% 0%,#fdfdfd 0%,#e6e8ec 100%)}
+         background:radial-gradient(120% 120% at 50% 0%,#dcdee2 0%,#b9bcc3 100%)}
   @media (prefers-color-scheme: dark){
-    canvas{background:radial-gradient(120% 120% at 50% 0%,#2c2c2e 0%,#161618 100%)}
+    canvas{background:radial-gradient(120% 120% at 50% 0%,#3a3a3d 0%,#1c1c1e 100%)}
   }
   canvas:active{cursor:grabbing}
   .vtools{position:absolute;top:11px;right:11px;display:flex;gap:7px}
@@ -426,9 +426,10 @@
         <button class="sm" id="btnImport">CSV importieren</button>
         <button class="sm" id="btnOrderNew">Neu</button>
         <button class="primary sm" id="btnOrderSave">Sichern</button>
+        <button class="chev" id="btnOrders" aria-label="Aufträge ein-/ausklappen" aria-expanded="false">▸</button>
       </div>
     </div>
-    <div style="margin-top:18px">
+    <div id="ordersBody" style="display:none;margin-top:18px">
       <div class="obar">
         <input id="oSearch" placeholder="Suchen: Bestellnummer, Käufer, Plattform …">
       </div>
@@ -927,6 +928,11 @@ function draw(){
     ctx.lineTo(px[i*6+2],px[i*6+3]);
     ctx.lineTo(px[i*6+4],px[i*6+5]);
     ctx.closePath(); ctx.fill();
+    // Dünne Kontur je Dreieck — sonst verschwinden helle Farben (z.B. Jade White) fast im
+    // Canvas-Hintergrund und dunkle Farben in der eigenen Schattenseite.
+    ctx.strokeStyle = "rgba(0,0,0,.16)";
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
   }
 }
 (function loop(){ if (spin && !drag && view) rotY += 0.006; draw(); requestAnimationFrame(loop); })();
@@ -990,6 +996,12 @@ $("btnOrderData").onclick = () => {
   $("orderDataBody").style.display = open ? "none" : "block";
   $("btnOrderData").classList.toggle("open", !open);
   $("btnOrderData").setAttribute("aria-expanded", String(!open));
+};
+$("btnOrders").onclick = () => {
+  const open = $("ordersBody").style.display === "block";
+  $("ordersBody").style.display = open ? "none" : "block";
+  $("btnOrders").classList.toggle("open", !open);
+  $("btnOrders").setAttribute("aria-expanded", String(!open));
 };
 
 /* ---------- Farbe ---------- */
