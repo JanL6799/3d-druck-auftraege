@@ -1219,8 +1219,47 @@ $("btnPdf").onclick = () => {
 
 /* ---------- Per Mail senden ---------- */
 // Reiner mailto:-Link — öffnet das eigene Mailprogramm mit fertigem Entwurf an Jan selbst
-// (Merkzettel/Beleg), kein Versand über einen externen Dienst nötig.
+// (Merkzettel/Beleg), kein Versand über einen externen Dienst nötig. mailto: kann selbst
+// keine Anhänge transportieren (Grenze des URI-Schemas) — Modell und Stand werden deshalb
+// als Dateien heruntergeladen, zum manuellen Anhängen an den bereits vorbereiteten Entwurf.
 const MAIL_TO = "jan@luetje.me";
+
+function downloadBlob(blob, filename){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// STL aus der geladenen Geometrie neu erzeugen — die ursprünglichen Rohbytes des Uploads
+// werden nach dem Parsen nicht aufgehoben, nur die Dreiecksdaten. Bei 3MF-Uploads gehen damit
+// Farb-/Mehrteil-Metadaten verloren, die reine Druckgeometrie bleibt vollständig erhalten.
+function meshToSTLBlob(tris, sourceName){
+  const n = tris.length/9;
+  const buf = new ArrayBuffer(84 + n*50);
+  const dv = new DataView(buf);
+  const header = ("Exportiert aus "+sourceName).slice(0,80);
+  for (let i=0;i<header.length;i++) dv.setUint8(i, header.charCodeAt(i));
+  dv.setUint32(80, n, true);
+  let o = 84;
+  for (let t=0;t<n;t++){
+    const s = t*9;
+    const ax=tris[s],ay=tris[s+1],az=tris[s+2], bx=tris[s+3],by=tris[s+4],bz=tris[s+5],
+          cx=tris[s+6],cy=tris[s+7],cz=tris[s+8];
+    let nx=(by-ay)*(cz-az)-(bz-az)*(cy-ay), ny=(bz-az)*(cx-ax)-(bx-ax)*(cz-az),
+        nz=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax);
+    const len = Math.hypot(nx,ny,nz) || 1; nx/=len; ny/=len; nz/=len;
+    dv.setFloat32(o,nx,true);    dv.setFloat32(o+4,ny,true);   dv.setFloat32(o+8,nz,true);
+    dv.setFloat32(o+12,ax,true); dv.setFloat32(o+16,ay,true);  dv.setFloat32(o+20,az,true);
+    dv.setFloat32(o+24,bx,true); dv.setFloat32(o+28,by,true);  dv.setFloat32(o+32,bz,true);
+    dv.setFloat32(o+36,cx,true); dv.setFloat32(o+40,cy,true);  dv.setFloat32(o+44,cz,true);
+    dv.setUint16(o+48,0,true);
+    o += 50;
+  }
+  return new Blob([buf], {type:"model/stl"});
+}
+
 $("btnMail").onclick = () => {
   const r = calc();
   if (!r){ const w=$("warn"); w.className="warnbox show";
@@ -1228,21 +1267,22 @@ $("btnMail").onclick = () => {
            return; }
   const g = id => $(id).value.trim();
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
+
+  const stlName = mesh.name.replace(/\.(stl|3mf)$/i,"") + ".stl";
+  downloadBlob(meshToSTLBlob(mesh.tris, mesh.name), stlName);
+  const standName = "stand-"+(g("orderId") || new Date().toISOString().slice(0,10))+".json";
+  downloadBlob(new Blob([JSON.stringify(snapshot())],{type:"application/json"}), standName);
+
   const lines = [
-    `Plattform: ${g("platform")}`,
-    `Bestellnummer: ${g("orderId") || "–"}`,
-    `Käufer: ${g("buyer") || "–"}`,
-    `Liefern bis: ${g("due") ? new Date(g("due")).toLocaleDateString("de-DE") : "–"}`,
-    `Stückzahl: ${r.qty}`,
+    `Datei: ${stlName} und ${standName} wurden gerade heruntergeladen — bitte beide an diese Mail anhängen.`,
     "",
-    `Datei: ${mesh.name}`,
     `Material: ${r.mat.line||"–"} · ${eur(+r.mat.price||0)}/kg`,
     `Farbe: ${color.n} (${color.c.toUpperCase()})`,
     `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
     `Materialbedarf: ${num(r.grams,1)} g / Stück`,
     `Druckzeit: ${(h?h+" h ":"")+m+" min"}${r.slicer?" · laut Slicer":""} / Stück`,
     "",
-    `Preis brutto: ${eur(r.gross)}`,
+    `Preis: ${eur(r.gross)}`,
     r.qty>1 ? `(${eur(r.gross/r.qty)} pro Stück)` : "",
     "",
     g("notes") ? `Notizen: ${g("notes")}` : ""

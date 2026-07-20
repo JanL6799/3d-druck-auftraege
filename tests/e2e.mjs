@@ -299,7 +299,12 @@ await test('Mail-Button baut mailto-Link mit Auftragsdetails an Jan selbst', asy
   assert.match(href, /^mailto:jan@luetje\.me\?subject=/);
   const decoded = decodeURIComponent(href);
   assert.match(decoded, /Materialbedarf/);
-  assert.match(decoded, /Preis brutto/);
+  assert.match(decoded, /Preis: /);
+  assert.match(decoded, /\.stl.*anhängen/);
+  assert.doesNotMatch(decoded, /Plattform:/);
+  assert.doesNotMatch(decoded, /Bestellnummer:/);
+  assert.doesNotMatch(decoded, /Käufer:/);
+  assert.doesNotMatch(decoded, /Liefern bis:/);
 });
 
 await test('Mail-Button warnt ohne geladenes Modell', async () => {
