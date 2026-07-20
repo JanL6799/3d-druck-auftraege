@@ -553,34 +553,29 @@ function parseSTL(buf){
 }
 
 /* ---------- 3MF-Parser (ZIP + natives Inflate, keine Bibliothek) ---------- */
-async function parse3MF(buf){
-  const xmlBytes = await unzipModel(buf);
-  const doc = new DOMParser().parseFromString(new TextDecoder().decode(xmlBytes), "application/xml");
-  // Namespace-fest: 3MF darf Prefixe nutzen (<m:object>), deshalb per Wildcard-Namespace
-  // auf den lokalen Namen matchen statt auf den qualifizierten Tag-Namen.
-  const tags = (el,n) => el.getElementsByTagNameNS("*", n);
-  if (tags(doc,"parsererror").length)
-    throw new Error("Die 3MF-Modelldaten konnten nicht gelesen werden.");
+// Namespace-fest: 3MF darf Prefixe nutzen (<m:object>), deshalb per Wildcard-Namespace
+// auf den lokalen Namen matchen statt auf den qualifizierten Tag-Namen.
+const tags3MF = (el,n) => el.getElementsByTagNameNS("*", n);
+const PROD_NS = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
 
-  // Einheit des Modells → mm (die 3MF-Vorgabe ist Millimeter)
-  const UNIT = { micron:0.001, millimeter:1, centimeter:10, inch:25.4, foot:304.8, meter:1000 };
-  const modelEl = tags(doc,"model")[0];
-  const uScale = UNIT[(modelEl && modelEl.getAttribute("unit")) || "millimeter"] ?? 1;
-
-  // Objekte einsammeln: Mesh-Objekte → {tri}, zusammengesetzte → {comp:[…]}
+// Objekte einer einzelnen .model-Datei einsammeln: Mesh-Objekte → {tri}, zusammengesetzte → {comp:[…]}.
+// Production-Extension-Komponenten können auf ein Objekt in einer ANDEREN Datei im Archiv
+// verweisen (p:path) — Bambu Studio legt große Modelle so unter 3D/Objects/*.model ab, statt
+// alles in 3D/3dmodel.model einzubetten. Das muss mitgelesen werden, sonst "fehlen" die Dreiecke.
+function objectsFromDoc(doc){
   const objs = {};
-  for (const obj of tags(doc,"object")){
+  for (const obj of tags3MF(doc,"object")){
     const id = obj.getAttribute("id");
-    const mesh = tags(obj,"mesh")[0];
+    const mesh = tags3MF(obj,"mesh")[0];
     if (mesh){
-      const vEls = tags(mesh,"vertex");
+      const vEls = tags3MF(mesh,"vertex");
       const verts = new Float64Array(vEls.length*3);
       for (let i=0;i<vEls.length;i++){
         verts[i*3]   = +vEls[i].getAttribute("x");
         verts[i*3+1] = +vEls[i].getAttribute("y");
         verts[i*3+2] = +vEls[i].getAttribute("z");
       }
-      const tEls = tags(mesh,"triangle");
+      const tEls = tags3MF(mesh,"triangle");
       const tri = new Float32Array(tEls.length*9);
       for (let i=0;i<tEls.length;i++){
         const idx = [+tEls[i].getAttribute("v1"),+tEls[i].getAttribute("v2"),+tEls[i].getAttribute("v3")];
@@ -592,27 +587,68 @@ async function parse3MF(buf){
       }
       objs[id] = {tri};
     } else {
-      objs[id] = {comp:[...tags(obj,"component")]
-        .map(c => ({id:c.getAttribute("objectid"), m:parseMat3MF(c.getAttribute("transform"))}))};
+      objs[id] = {comp:[...tags3MF(obj,"component")].map(c => ({
+        id: c.getAttribute("objectid"),
+        m:  parseMat3MF(c.getAttribute("transform")),
+        path: (c.getAttributeNS(PROD_NS,"path") || c.getAttribute("p:path") || "").replace(/^\//,"") || null
+      }))};
     }
   }
+  return objs;
+}
 
-  // Über die Bauplatte (build/item) sammeln, Transformationen berücksichtigen
+async function parse3MF(buf){
+  const {entries, cdOff} = listZipEntries(buf);
+  const rootEnt = entries.find(e => /3dmodel\.model$/i.test(e.name)) || entries.find(e => /\.model$/i.test(e.name));
+  if (!rootEnt) throw new Error("Keine 3D-Modelldaten im 3MF-Archiv gefunden.");
+
+  const docCache = new Map();     // Dateiname im Archiv -> geparstes XML-Dokument
+  async function loadDoc(name){
+    if (docCache.has(name)) return docCache.get(name);
+    const ent = entries.find(e => e.name === name);
+    if (!ent) { docCache.set(name, null); return null; }
+    const bytes = await readZipEntry(buf, ent, cdOff);
+    const doc = new DOMParser().parseFromString(new TextDecoder().decode(bytes), "application/xml");
+    if (tags3MF(doc,"parsererror").length)
+      throw new Error("Die 3MF-Modelldaten konnten nicht gelesen werden.");
+    docCache.set(name, doc);
+    return doc;
+  }
+  const objsCache = new Map();    // Dateiname -> Objekte dieser Datei
+  async function objectsOf(name){
+    if (objsCache.has(name)) return objsCache.get(name);
+    const doc = await loadDoc(name);
+    const objs = doc ? objectsFromDoc(doc) : {};
+    objsCache.set(name, objs);
+    return objs;
+  }
+
+  const rootDoc = await loadDoc(rootEnt.name);
+  // Einheit des Modells → mm (die 3MF-Vorgabe ist Millimeter)
+  const UNIT = { micron:0.001, millimeter:1, centimeter:10, inch:25.4, foot:304.8, meter:1000 };
+  const modelEl = tags3MF(rootDoc,"model")[0];
+  const uScale = UNIT[(modelEl && modelEl.getAttribute("unit")) || "millimeter"] ?? 1;
+
+  // Über die Bauplatte (build/item) sammeln, Transformationen berücksichtigen,
+  // dateiübergreifend (p:path) rekursiv auflösen.
   const out = [];
-  const emit = (id, m) => {
+  async function emit(id, m, fileName){
+    const objs = await objectsOf(fileName);
     const o = objs[id]; if (!o) return;
     if (o.tri) for (let i=0;i<o.tri.length;i+=3){
       const p = applyMat3MF(m, o.tri[i], o.tri[i+1], o.tri[i+2]);
       out.push(p[0]*uScale, p[1]*uScale, p[2]*uScale);
     }
-    if (o.comp) for (const c of o.comp) emit(c.id, mulMat3MF(c.m, m));
-  };
-  const build = tags(doc,"build")[0];
-  const items = build ? [...tags(build,"item")] : [];
+    if (o.comp) for (const c of o.comp) await emit(c.id, mulMat3MF(c.m, m), c.path || fileName);
+  }
+  const build = tags3MF(rootDoc,"build")[0];
+  const items = build ? [...tags3MF(build,"item")] : [];
   if (items.length)
-    for (const it of items) emit(it.getAttribute("objectid"), parseMat3MF(it.getAttribute("transform")));
-  else
-    for (const id in objs) if (objs[id].tri) emit(id, null);   // Notnagel ohne Bauplatte
+    for (const it of items) await emit(it.getAttribute("objectid"), parseMat3MF(it.getAttribute("transform")), rootEnt.name);
+  else {
+    const rootObjs = await objectsOf(rootEnt.name);               // Notnagel ohne Bauplatte
+    for (const id in rootObjs) if (rootObjs[id].tri) await emit(id, null, rootEnt.name);
+  }
 
   if (out.length < 9) throw new Error("Keine Dreiecke im 3MF-Modell gefunden.");
   return new Float32Array(out);
@@ -641,8 +677,8 @@ function mulMat3MF(a,b){
   return R;
 }
 
-// ZIP-Zentralverzeichnis lesen, Modelldatei finden, roh-deflate über DecompressionStream
-async function unzipModel(buf){
+// ZIP-Zentralverzeichnis lesen — liefert alle Einträge (Name, Methode, Lage im Archiv)
+function listZipEntries(buf){
   const dv = new DataView(buf), u8 = new Uint8Array(buf);
   let eocd = -1;
   for (let i = buf.byteLength-22; i >= 0 && i > buf.byteLength-22-65536; i--)
@@ -662,8 +698,12 @@ async function unzipModel(buf){
     entries.push({name, method, compSize, lho});
     p += 46 + nameLen + extraLen + commLen;
   }
-  const ent = entries.find(e => /3dmodel\.model$/i.test(e.name)) || entries.find(e => /\.model$/i.test(e.name));
-  if (!ent) throw new Error("Keine 3D-Modelldaten im 3MF-Archiv gefunden.");
+  return {entries, cdOff};
+}
+
+// Einen ZIP-Eintrag entpacken, roh-deflate über DecompressionStream
+async function readZipEntry(buf, ent, cdOff){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
   if (dv.getUint32(ent.lho,true) !== 0x04034b50) throw new Error("Das 3MF-Archiv ist beschädigt.");
   const nl = dv.getUint16(ent.lho+26,true), xl = dv.getUint16(ent.lho+28,true);
   const start = ent.lho + 30 + nl + xl;

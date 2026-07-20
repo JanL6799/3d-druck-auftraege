@@ -64,8 +64,11 @@ Build-Skript wie bei PV und E-Auto.
   Erkennt Trennzeichen (`;`, Tab, `,`) und die Spalten für Bestellnummer und Käufer selbst,
   entdoppelt und legt jede Bestellung als Auftrag an. Alles lokal, keine API, kein Server.
 - **Upload:** STL binär und ASCII sowie 3MF, per Drag-and-drop. Alles bleibt lokal im Browser.
-  Der 3MF-Parser ist namespace-fest (auch `<m:object>`-Prefixe) und rechnet das
-  `unit`-Attribut nach mm um (micron bis meter).
+  Der 3MF-Parser ist namespace-fest (auch `<m:object>`-Prefixe), rechnet das `unit`-Attribut
+  nach mm um (micron bis meter) und löst die 3MF-Production-Extension auf: Bambu Studio lagert
+  die Geometrie bei größeren Modellen in eine eigene Datei im ZIP aus (z. B.
+  `3D/Objects/object_1.model`), referenziert per `<component p:path="…">` aus der Hauptdatei
+  `3D/3dmodel.model` — der Parser lädt diese Datei dateiübergreifend nach.
 - **Wasserdichtheits-Check:** Beim Laden wird geprüft, ob jede Kante zu genau zwei Dreiecken
   gehört. Löchrige Meshes liefern beliebig falsche Volumina — statt still einen falschen Preis
   zu zeigen, warnt die App mit der Zahl der offenen Kanten. (Ab 300.000 Dreiecken wird die
@@ -162,6 +165,15 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Fünfte Runde (20. Juli 2026):
+
+1. **Bugfix: 3MF-Dateien mit externer Objektdatei wurden als leer abgelehnt**
+   ("Keine Dreiecke im 3MF-Modell gefunden"). Bambu Studio legt die Geometrie bei größeren
+   Modellen in `3D/Objects/*.model` ab und verweist nur per `<component p:path="…">` darauf —
+   der Parser las bisher ausschließlich `3D/3dmodel.model`. Jetzt löst er referenzierte Dateien
+   im selben ZIP-Archiv rekursiv auf. Regressionstest mit synthetischer Production-Extension-
+   Datei ergänzt.
 
 Vierte Runde (20. Juli 2026):
 

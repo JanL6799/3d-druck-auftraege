@@ -40,6 +40,59 @@ function cube3MF(){
   return zip('3D/3dmodel.model', Buffer.from(xml, 'utf8'));
 }
 
+// 20-mm-Würfel als 3MF nach 3MF-Production-Extension: die Hauptdatei enthält nur einen
+// <component p:path="…">-Verweis, die eigentliche Geometrie liegt in einer zweiten Datei im
+// selben ZIP (so legt Bambu Studio größere Modelle ab, z.B. unter 3D/Objects/object_1.model).
+function splitCube3MF(){
+  const V = [[0,0,0],[20,0,0],[20,20,0],[0,20,0],[0,0,20],[20,0,20],[20,20,20],[0,20,20]];
+  const F = [[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],
+             [1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
+  const verts = V.map(([x,y,z]) => `<vertex x="${x}" y="${y}" z="${z}"/>`).join('');
+  const tris  = F.map(([a,b,c]) => `<triangle v1="${a}" v2="${b}" v3="${c}"/>`).join('');
+  const objectXml = `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+<resources><object id="1" type="model"><mesh><vertices>${verts}</vertices><triangles>${tris}</triangles></mesh></object></resources>
+<build/></model>`;
+  const rootXml = `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+       xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06">
+<resources><object id="2" type="model"><components>
+  <component p:path="/3D/Objects/object_1.model" objectid="1" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>
+</components></object></resources>
+<build><item objectid="2"/></build></model>`;
+  return zipMulti([
+    { name: '3D/3dmodel.model',        data: Buffer.from(rootXml, 'utf8') },
+    { name: '3D/Objects/object_1.model', data: Buffer.from(objectXml, 'utf8') }
+  ]);
+}
+
+function zipMulti(files){
+  const locals = [], centrals = [];
+  let offset = 0;
+  for (const {name, data} of files){
+    const nameB = Buffer.from(name, 'utf8');
+    const comp = deflateRawSync(data);
+    const crc = crc32(data);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50,0); lh.writeUInt16LE(20,4); lh.writeUInt16LE(8,8);
+    lh.writeUInt32LE(crc,14); lh.writeUInt32LE(comp.length,18); lh.writeUInt32LE(data.length,22);
+    lh.writeUInt16LE(nameB.length,26);
+    const local = Buffer.concat([lh, nameB, comp]);
+    const cd = Buffer.alloc(46);
+    cd.writeUInt32LE(0x02014b50,0); cd.writeUInt16LE(20,4); cd.writeUInt16LE(20,6); cd.writeUInt16LE(8,10);
+    cd.writeUInt32LE(crc,16); cd.writeUInt32LE(comp.length,20); cd.writeUInt32LE(data.length,24);
+    cd.writeUInt16LE(nameB.length,28); cd.writeUInt32LE(offset,42);
+    centrals.push(Buffer.concat([cd, nameB]));
+    locals.push(local);
+    offset += local.length;
+  }
+  const localsBuf = Buffer.concat(locals), centralBuf = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50,0); eocd.writeUInt16LE(files.length,8); eocd.writeUInt16LE(files.length,10);
+  eocd.writeUInt32LE(centralBuf.length,12); eocd.writeUInt32LE(localsBuf.length,16);
+  return Buffer.concat([localsBuf, centralBuf, eocd]);
+}
+
 function zip(name, data){
   const nameB = Buffer.from(name, 'utf8');
   const comp = deflateRawSync(data);
@@ -115,6 +168,16 @@ await test('3MF-Würfel → exakt 8000 mm³', async () => {
   await page.evaluate(async b64 => {
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     await window.loadFile(new File([bytes], 'cube.3mf'));
+  }, b64);
+  assert.equal(await text('#rVol'), '8,0 cm³');
+  assert.equal(await text('#rDim'), '20 × 20 × 20 mm');
+});
+
+await test('3MF mit externer Objektdatei (Production Extension) wird aufgelöst', async () => {
+  const b64 = splitCube3MF().toString('base64');
+  await page.evaluate(async b64 => {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    await window.loadFile(new File([bytes], 'split.3mf'));
   }, b64);
   assert.equal(await text('#rVol'), '8,0 cm³');
   assert.equal(await text('#rDim'), '20 × 20 × 20 mm');
