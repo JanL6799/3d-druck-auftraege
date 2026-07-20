@@ -21,7 +21,8 @@ Status (offen → gedruckt → versendet → bezahlt), Suche und Filter.
   (eBay/Etsy/Amazon), MwSt. Die Druckzeit-Schätzung lässt sich durch die echte
   Slicer-Zeit übersteuern.
 - **Material & Farbe:** frei editierbare Filamentliste (eigene Einkaufspreise als
-  Standard speicherbar), 56 benannte Farbtöne plus eigene Farben.
+  Standard speicherbar); Farbauswahl beschränkt auf die 90 offiziellen Bambu-Lab-Farben
+  (PLA und PETG), gruppiert nach Linie mit Preis pro kg.
 - **Aufträge:** CSV-Import der Bestellexporte von eBay/Etsy/Amazon, Auftragsliste mit
   Status/Suche/Filter, Duplizieren für Wiederholungskäufe, Komplett-Backup als JSON,
   Umsatz-CSV für die Buchhaltung.
