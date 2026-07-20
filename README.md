@@ -1,8 +1,11 @@
 # 3D-Druck Auftragserfassung
 
 Eine einzige HTML-Datei zum Erfassen und Kalkulieren von 3D-Druckaufträgen, die über
-eBay, Etsy oder Amazon hereinkommen. Kein Server, kein CDN, keine Installation —
+eBay, Etsy oder Amazon hereinkommen. Kein CDN, keine Installation —
 **`index.html` herunterladen, Doppelklick, fertig.** Alle Daten bleiben lokal im Browser.
+Zwei Funktionen (Server-Backup, Mail-Versand mit Anhang) brauchen zusätzlich den kleinen
+API-Server aus `server/`, siehe [`NOTIZEN.md`](NOTIZEN.md) — ohne den läuft die App trotzdem
+komplett offline, nur diese zwei Extras fehlen dann.
 
 ![Screenshot: Modellvorschau und Live-Kalkulation](docs/screenshot.png)
 
@@ -11,7 +14,7 @@ eBay, Etsy oder Amazon hereinkommen. Kein Server, kein CDN, keine Installation �
 STL oder 3MF laden → Bambu-Lab-Farbe wählen (legt Material gleich mit fest) → Preis
 steht sofort oben, ganz ohne Scrollen. Aufträge, Auftragsdaten und die
 Kalkulationsbasis stecken bei Bedarf hinter einem Pfeil, damit der Kopf der Seite
-aufgeräumt bleibt. Fertig geht es raus als PDF oder als Mail-Entwurf.
+aufgeräumt bleibt. Fertig geht es raus als PDF oder direkt per Mail mit Anhang.
 
 ## Funktionen
 
@@ -30,15 +33,15 @@ aufgeräumt bleibt. Fertig geht es raus als PDF oder als Mail-Entwurf.
 - **Aufträge:** CSV-Import der Bestellexporte von eBay/Etsy/Amazon, Auftragsliste mit
   Status/Suche/Filter, Duplizieren für Wiederholungskäufe, Komplett-Backup als JSON,
   Umsatz-CSV für die Buchhaltung.
-- **PDF & Mail:** einseitiges A4-Auftragsblatt über den Druckdialog, oder ein fertiger
-  Mail-Entwurf per `mailto:` (Modell als STL und aktueller Stand als JSON werden dafür
-  automatisch heruntergeladen, zum Anhängen an die Mail).
+- **PDF & Mail:** einseitiges A4-Auftragsblatt über den Druckdialog, oder direkter
+  Mail-Versand mit echtem Anhang (Modell als STL, aktueller Stand als JSON) über den
+  API-Server auf dem Pi (Resend-API) — kein manuelles Anhängen mehr nötig.
 - **Darstellung:** folgt automatisch dem System, manueller Hell/Dunkel-Umschalter im
   Header überschreibt das bei Bedarf.
 
 Details zu Rechenmodell, Grenzen und Entscheidungen: [`NOTIZEN.md`](NOTIZEN.md).
 
-20 Ende-zu-Ende-Tests fahren die App headless durch: Volumenberechnung (STL + 3MF,
+21 Ende-zu-Ende-Tests fahren die App headless durch: Volumenberechnung (STL + 3MF,
 auch mit ausgelagerter Geometrie), Wasserdichtheits- und Bauraum-Warnung, CSV-Import,
-Auftragsliste, Backup, Migration, Darstellungs-Umschalter, Mail-Entwurf. Sie laufen
+Auftragsliste, Backup, Migration, Darstellungs-Umschalter, Mail-Versand. Sie laufen
 bei jedem Push automatisch über GitHub Actions.

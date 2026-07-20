@@ -298,28 +298,31 @@ await test('Farbwahl legt Material für die Kalkulation fest', async () => {
   assert.notEqual(cMatAfter, cMatBefore);
 });
 
-await test('Mail-Button baut mailto-Link mit Auftragsdetails an Jan selbst', async () => {
-  const href = await page.evaluate(() => {
-    const orig = document.createElement.bind(document);
+await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang über /api/send-mail', async () => {
+  const call = await page.evaluate(async () => {
+    const orig = window.fetch;
     let captured = null;
-    document.createElement = tag => {
-      const el = orig(tag);
-      if (tag === 'a') el.click = () => { captured = el.href; };
-      return el;
+    window.fetch = async (url, opts) => {
+      captured = { url, body: JSON.parse(opts.body) };
+      return { ok: true, json: async () => ({ok:true, id:'test-id'}) };
     };
     document.getElementById('btnMail').click();
-    document.createElement = orig;
+    await new Promise(r => setTimeout(r, 300));
+    window.fetch = orig;
     return captured;
   });
-  assert.match(href, /^mailto:jan@luetje\.me\?subject=/);
-  const decoded = decodeURIComponent(href);
-  assert.match(decoded, /Materialbedarf/);
-  assert.match(decoded, /Preis: /);
-  assert.match(decoded, /\.stl.*anhängen/);
-  assert.doesNotMatch(decoded, /Plattform:/);
-  assert.doesNotMatch(decoded, /Bestellnummer:/);
-  assert.doesNotMatch(decoded, /Käufer:/);
-  assert.doesNotMatch(decoded, /Liefern bis:/);
+  assert.equal(call.url, '/api/send-mail');
+  assert.match(call.body.subject, /^3D-Druck Auftrag/);
+  assert.match(call.body.text, /Materialbedarf/);
+  assert.match(call.body.text, /Preis: /);
+  assert.doesNotMatch(call.body.text, /Plattform:/);
+  assert.doesNotMatch(call.body.text, /Bestellnummer:/);
+  assert.doesNotMatch(call.body.text, /Käufer:/);
+  assert.doesNotMatch(call.body.text, /Liefern bis:/);
+  assert.equal(call.body.attachments.length, 2);
+  assert.match(call.body.attachments[0].filename, /\.stl$/);
+  assert.ok(call.body.attachments[0].content.length > 0);
+  assert.match(call.body.attachments[1].filename, /^stand-.*\.json$/);
 });
 
 await test('Mail-Button warnt ohne geladenes Modell', async () => {
