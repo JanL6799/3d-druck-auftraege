@@ -127,8 +127,7 @@ Build-Skript wie bei PV und E-Auto.
   gruppiert nach Linie mit Preis pro kg — bewusst keine eigene Farbe mehr, da nur gekauft und
   gedruckt werden kann, was Bambu tatsächlich anbietet. Farbe hängt weiterhin **nicht** am
   Material (unabhängige Auswahl, wie schon zuvor).
-- **Einstellungen:** Füllung, Schichthöhe, Wandlinien, Stückzahl, Skalierung, Stützstruktur
-  (Schalter + freier Prozentregler).
+- **Einstellungen:** Füllung, Schichthöhe, Wandlinien, Stückzahl, Skalierung.
 - **PDF:** einseitiges A4-Auftragsblatt mit Vorschaubild über den Druckdialog → „Als PDF sichern“.
   Bewusst ohne jsPDF, das wäre eine externe Abhängigkeit.
 - **Zwischenstand:** JSON-Download inklusive Modellgeometrie, eigenen Materialien und Farben.
@@ -138,23 +137,23 @@ Build-Skript wie bei PV und E-Auto.
 
 ```
 Schale  = min(Volumen, Oberfläche × Wandlinien × 0,4 mm)
-Solid   = (Schale + (Volumen − Schale) × Füllung) × (1 + Stützen%)
+Solid   = Schale + (Volumen − Schale) × Füllung
 Gramm   = Solid × Dichte / 1000
 Stunden = Solid / (8 mm³/s × Tempo × (Schichthöhe / 0,2)) / 3600 × 1,25
-Preis   = ((Material + Strom + Maschine) × (1 + Marge) + Rüsten) × Stück
-          / (1 − Plattformgebühr) × (1 + MwSt.)
+Preis   = ((Material + Strom + Maschine) × (1 + Marge) + Rüsten) × Stück × (1 + MwSt.)
 ```
 
 Strom ist eine eigene Position: **Leistung (W) × Druckzeit × €/kWh**. Startwerte 120 W und
-0,25 €/kWh (Jans Tarif). Wichtig: In „Maschine €/h“ gehören nur Abschreibung, Düsen und Wartung —
+0,27 €/kWh (Jans Tarif). Wichtig: In „Maschine €/h“ gehören nur Abschreibung, Düsen und Wartung —
 **ohne Strom**, sonst zählt er doppelt. Der Faktor 1,25 in der Zeitformel deckt Bewegung und
 Retraktion ab, die 8 mm³/s sind der Referenzdurchsatz bei 0,2 mm Schicht und PLA.
 
-Plattformgebühren fest hinterlegt: eBay 11 %, Etsy 9,5 %, Amazon 15 %. Die Gebühr wird auf den
-Endpreis aufgeschlagen (`/(1−Satz)`), nicht draufgerechnet — sonst bleibt nach Abzug zu wenig übrig.
+Keine Plattformgebühr mehr (früher fest für eBay/Etsy/Amazon hinterlegt, auf Wunsch entfernt).
+Kein Materialaufschlag für Stützstrukturen mehr (früher ein freier Prozentregler, ebenfalls auf
+Wunsch entfernt) — Solid rechnet jetzt direkt aus Schale und Füllung, ohne Zuschlag.
 
-Weitere Startwerte: Maschine 2,50 €/h, Rüsten 3 €, Marge 40 %, MwSt. 19 %, Bauraum 256 × 256 ×
-256 mm (jetzt frei einstellbar).
+Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, Bauraum 256 × 256 ×
+256 mm (frei einstellbar).
 
 ## Verifiziert
 
@@ -182,10 +181,7 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
 1. **Die Druckzeit-Schätzung bleibt eine Durchsatz-Näherung, kein Slicing.** Sie kennt weder
    Beschleunigungswerte noch reale Stützgeometrie. Wer es genau braucht, trägt die Slicer-Zeit
    ins Übersteuerungsfeld ein — dann rechnen Maschinen- und Stromkosten exakt.
-2. **Stützen sind ein pauschaler Materialaufschlag**, aus der Geometrie wird nichts abgeleitet —
-   deshalb ist der Prozentsatz frei einstellbar (kleine Brücke ~5 %, frei stehende Figur ~60 %).
-   Das bleibt bewusst so; echte Stützgeometrie käme nur mit einem Slicer.
-3. **Der Datei-Export („Stand speichern“) bettet die Geometrie weiterhin ein** — gewollt, damit
+2. **Der Datei-Export („Stand speichern“) bettet die Geometrie weiterhin ein** — gewollt, damit
    die JSON-Datei in sich vollständig ist. Nur die Auftragsliste dedupliziert über den
    Mesh-Speicher. Sehr große Modelle können den `localStorage`-Autosave weiterhin sprengen
    (still abgefangen, der Download klappt trotzdem).
@@ -201,6 +197,15 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Siebte Runde (20. Juli 2026):
+
+1. **Standardwerte der Kalkulationsbasis angepasst:** Maschine 2,50 € → 1 €/h, MwSt. 19 % → 0 %,
+   Strompreis 0,25 € → 0,27 €/kWh, Marge 40 % → 15 %.
+2. **Materialaufschlag durch Stützen komplett entfernt** (Schalter „Stützen mitdrucken“ +
+   Prozentregler) — auf Wunsch, keine Nachfolgefunktion. `Solid` rechnet jetzt direkt aus
+   Schale und Füllung, ohne Zuschlag. Damit auch das dann ungenutzte `.switch`/`.tog`-CSS
+   (der Schalter) entfernt.
 
 Sechste Runde (20. Juli 2026):
 
@@ -269,7 +274,7 @@ Zweite Runde:
    laden“ holt die Schätzwerte zurück.
 5. **Bauraum konfigurierbar + v1 wieder ladbar.** X/Y/Z frei einstellbar mit 90°-Rotationslogik
    in der Warnung; `applyState()` migriert v1-Stände (best-effort) und lehnt neuere Formate mit
-   klarer Meldung ab. Die pauschalen Stützen bleiben bewusst wie sie sind.
+   klarer Meldung ab.
 
 ## Offene Punkte
 

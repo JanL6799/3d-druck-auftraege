@@ -115,17 +115,6 @@
   .sliderhead span:first-child{font-size:12px;font-weight:500;color:var(--muted)}
   .sliderhead span:last-child{font-size:15px;font-weight:550;font-variant-numeric:tabular-nums}
 
-  /* Schalter */
-  .switch{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:2px 0}
-  .switch .t{font-size:15px;font-weight:450}
-  .tog{position:relative;width:51px;height:31px;border-radius:100px;background:var(--line);
-       border:none;padding:0;cursor:pointer;transition:.22s;flex:none}
-  .tog:hover{background:var(--line)}
-  .tog::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;
-       background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.22);transition:.22s}
-  .tog.on{background:#30d158}
-  .tog.on::after{transform:translateX(20px)}
-
   /* Ablagefläche + Vorschau */
   #drop{border:1.5px dashed var(--line);border-radius:14px;padding:52px 20px;text-align:center;
         cursor:pointer;transition:.18s;background:var(--panel2)}
@@ -323,19 +312,6 @@
         mit der echten Zeit aus dem Slicer.
       </p>
 
-      <label style="margin-bottom:10px">Stützstruktur</label>
-      <div class="switch">
-        <span class="t">Stützen mitdrucken</span>
-        <button class="tog" id="support" aria-pressed="false"></button>
-      </div>
-      <div id="supBox" style="display:none">
-        <div class="sliderhead"><span>Materialaufschlag durch Stützen</span><span id="lSup">15 %</span></div>
-        <input type="range" id="supPct" min="0" max="100" step="1" value="15">
-        <p class="hint" style="text-align:left;margin-top:2px">
-          Wie viel Material die Stützen zusätzlich kosten — bei einer kleinen Brücke 5 %, bei einer
-          frei stehenden Figur auch 60 %.
-        </p>
-      </div>
     </div>
   </div>
 
@@ -818,16 +794,13 @@ function calc(){
   const layer  = +$("layer").value;
   const walls  = +$("walls").value;
   const qty    = Math.max(1, +$("qty").value||1);
-  const supOn  = $("support").classList.contains("on");
-  const supPct = supOn ? +$("supPct").value/100 : 0;
 
   const vol  = mesh.vol  * s**3;
   const area = mesh.area * s**2;
   const size = mesh.size.map(v => v*s);
 
   const shell = Math.min(vol, area * walls * NOZZLE);
-  let solid = shell + (vol - shell) * infill;
-  solid *= (1 + supPct);
+  const solid = shell + (vol - shell) * infill;
 
   const dens  = +mat.dens  || 1.24;
   const speed = +mat.speed || 1;
@@ -847,7 +820,7 @@ function calc(){
   const gross   = netQty * (1 + vat/100);
 
   return {vol,grams,hours,size,cMat:cMat*qty,cElec:cElec*qty,cMach:cMach*qty,cSet:cSet*qty,
-          gross,qty,vat,mat,infill,layer,walls,supOn,supPct,slicer:slicerH!==null};
+          gross,qty,vat,mat,infill,layer,walls,slicer:slicerH!==null};
 }
 
 function render(){
@@ -1088,23 +1061,15 @@ function drawSwatches(){
 /* ---------- Eingaben ---------- */
 $("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
 $("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
-$("supPct").oninput = e => { $("lSup").textContent    = e.target.value+" %"; render(); };
-$("support").onclick = () => {
-  const on = $("support").classList.toggle("on");
-  $("support").setAttribute("aria-pressed", on);
-  $("supBox").style.display = on ? "block" : "none";
-  render();
-};
 ["walls","qty","scale","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz",
  "slicerTime"].forEach(id => $(id).addEventListener("input", render));
 
 /* ---------- Speichern / Laden ---------- */
 const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","walls","qty","scale",
-                "supPct","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
+                "pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
 
 function snapshot(embedMesh = true){
-  const d = { v:2, saved:new Date().toISOString(), color,
-              support:$("support").classList.contains("on"), fields:{} };
+  const d = { v:2, saved:new Date().toISOString(), color, fields:{} };
   FIELDS.forEach(f => d.fields[f] = $(f).value);
   if (mesh){
     const packed = () => ({ name:mesh.name, bytes:mesh.bytes,
@@ -1153,7 +1118,7 @@ $("btnLoad").onclick = () => {
 // alles übernehmen, was sich zuordnen lässt; der Rest fällt auf die Standardwerte zurück.
 function migrateV1(d){
   const src = d.fields || d;
-  const out = { v:2, color:d.color, support:d.support, fields:{} };
+  const out = { v:2, color:d.color, fields:{} };
   FIELDS.forEach(f => { if (src[f] !== undefined) out.fields[f] = src[f]; });
   if (d.mesh) out.mesh = d.mesh;
   return out;
@@ -1166,10 +1131,6 @@ function applyState(d){
   FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
   if (d.color && d.color.c) color = d.color;
 
-  $("support").classList.toggle("on", !!d.support);
-  $("support").setAttribute("aria-pressed", !!d.support);
-  $("supBox").style.display = d.support ? "block" : "none";
-
   let mdata = d.mesh;
   if (!mdata && d.meshHash) mdata = loadMeshStore()[d.meshHash] || null;
   if (mdata && mdata.tris){
@@ -1181,7 +1142,6 @@ function applyState(d){
   }
   $("lInfill").textContent = $("infill").value+" %";
   $("lLayer").textContent  = num(+$("layer").value,2)+" mm";
-  $("lSup").textContent    = $("supPct").value+" %";
   drawSwatches(); render();
 }
 
@@ -1225,7 +1185,6 @@ $("btnPdf").onclick = () => {
           ${row("Füllung", num(r.infill*100,0)+" %")}
           ${row("Schichthöhe", num(r.layer,2)+" mm")}
           ${row("Wandlinien", r.walls)}
-          ${row("Stützstruktur", r.supOn ? "ja · +"+num(r.supPct*100,0)+" % Material" : "nein")}
           ${row("Materialbedarf", num(r.grams,1)+" g / Stück")}
           ${row("Druckzeit", ((h?h+" h ":"")+m+" min")+" / Stück"+(r.slicer?" · laut Slicer":""))}
         </table>
