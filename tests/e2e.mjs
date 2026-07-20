@@ -211,16 +211,12 @@ await test('Backup-Restore übernimmt neue Aufträge, überspringt bekannte', as
   assert.equal(again, 0);
 });
 
-await test('Eigene Materialpreise überleben einen Neustart', async () => {
-  await page.click('#btnMat');
-  const priceInput = page.locator('#matRows .mrow').first().locator('input[data-k="price"]');
-  await priceInput.fill('99');
-  await page.click('#btnMatSave');
-  await page.reload();
-  await page.click('#btnMat');
-  assert.equal(await page.locator('#matRows .mrow').first().locator('input[data-k="price"]').inputValue(), '99');
-  await page.click('#btnMatFactory');
-  assert.equal(await page.locator('#matRows .mrow').first().locator('input[data-k="price"]').inputValue(), '22');
+await test('Farbwahl legt Material für die Kalkulation fest', async () => {
+  const cMatBefore = await page.evaluate(() => calc().cMat);
+  await page.locator('.sw[data-line="PETG-CF"]').first().click();
+  assert.match(await text('#cHex'), /PETG-CF/);
+  const cMatAfter = await page.evaluate(() => calc().cMat);
+  assert.notEqual(cMatAfter, cMatBefore);
 });
 
 await test('v1-Stand lädt (Migration), neuere Version wird abgelehnt', async () => {

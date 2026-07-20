@@ -147,18 +147,6 @@
   .palhead .name{font-size:13px;font-weight:600}
   .palhead .price{font-size:12px;color:var(--muted)}
 
-  /* Materialtabelle */
-  .mtable{margin-top:8px;border:1px solid var(--line-soft);border-radius:12px;overflow:hidden}
-  .mhead,.mrow{display:grid;grid-template-columns:1fr 76px 74px 68px 32px;gap:8px;align-items:center;
-        padding:8px 10px}
-  .mhead{background:var(--panel2);border-bottom:1px solid var(--line-soft);font-size:11px;
-        color:var(--muted);font-weight:500}
-  .mhead div:not(:first-child){text-align:center}
-  .mrow{border-bottom:1px solid var(--line-soft)}
-  .mrow:last-child{border-bottom:none}
-  .mrow.active{background:var(--accent-soft)}
-  .mrow input{padding:7px 8px;font-size:14px;border-radius:8px}
-  .mrow input.n{text-align:center;font-variant-numeric:tabular-nums}
   .del{border:none;background:none;color:var(--muted);font-size:19px;line-height:1;padding:2px 6px;
        border-radius:7px;cursor:pointer}
   .del:hover{background:var(--warn-bg);color:#d70015}
@@ -284,27 +272,6 @@
     </div>
 
     <div class="card">
-      <h3>Auftragsdaten</h3>
-      <p class="sub">Woher die Bestellung kommt und für wen sie ist.</p>
-      <div class="row">
-        <div>
-          <label for="platform">Plattform</label>
-          <select id="platform">
-            <option>eBay</option><option>Etsy</option><option>Amazon</option>
-            <option>Direktanfrage</option><option>Sonstige</option>
-          </select>
-        </div>
-        <div><label for="orderId">Bestellnummer</label><input id="orderId" placeholder="z. B. 14-13454-98123"></div>
-      </div>
-      <div class="row">
-        <div><label for="buyer">Käufer</label><input id="buyer" placeholder="Name / Nutzername"></div>
-        <div><label for="due">Liefern bis</label><input id="due" type="date"></div>
-      </div>
-      <label for="notes">Notizen</label>
-      <textarea id="notes" placeholder="Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
-    </div>
-
-    <div class="card">
       <h3>Druckeinstellungen</h3>
       <p class="sub">Bestimmen Materialbedarf, Druckzeit und damit den Preis.</p>
       <div class="row">
@@ -357,42 +324,6 @@
   <!-- RECHTS -->
   <div>
     <div class="card">
-      <h3>Material</h3>
-      <p class="sub">Deine Filamente, deine Preise. Alles direkt editierbar.</p>
-      <label for="material">Aktives Material</label>
-      <select id="material"></select>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px">
-        <label style="margin:0">Materialliste</label>
-        <button class="link" id="btnMat">Bearbeiten</button>
-      </div>
-      <div id="matBox" style="display:none">
-        <div class="mtable">
-          <div class="mhead"><div>Name</div><div>€/kg</div><div>g/cm³</div><div>Tempo</div><div></div></div>
-          <div id="matRows"></div>
-        </div>
-        <div class="stack" style="margin-top:12px">
-          <button class="sm" id="btnMatAdd">+ Material</button>
-          <button class="sm" id="btnMatSave">Als Standard sichern</button>
-          <button class="sm" id="btnMatReset">Zurücksetzen</button>
-        </div>
-        <p class="hint" style="text-align:left">
-          <b>Tempo</b> ist der Geschwindigkeitsfaktor gegenüber PLA (1,0). TPU druckt etwa halb so
-          schnell, also 0,45. — <b>Als Standard sichern</b> merkt sich deine echten Einkaufspreise
-          dauerhaft in diesem Browser; „Zurücksetzen“ holt genau diese wieder.
-          <button class="link" id="btnMatFactory" style="font-size:12px;padding:0">Marktwerte laden</button>
-        </p>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Farbe</h3>
-      <p class="sub">Nur Bambu-Lab-Farben — das ist alles, was gekauft und gedruckt werden kann.</p>
-      <div id="paletteGroups"></div>
-      <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
-    </div>
-
-    <div class="card">
       <h3>Kalkulation</h3>
       <p class="sub">Live aus Modell, Material und Einstellungen.</p>
       <table class="calc">
@@ -410,6 +341,13 @@
         <tr class="total"><td>Preis brutto</td><td id="rTotal">–</td></tr>
       </table>
       <div class="hint" id="rPer" style="text-align:right"></div>
+    </div>
+
+    <div class="card">
+      <h3>Material &amp; Farbe</h3>
+      <p class="sub">Nur Bambu-Lab-Farben — die Wahl legt Material und Farbe zusammen fest.</p>
+      <div id="paletteGroups"></div>
+      <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
     </div>
 
     <div class="card">
@@ -450,6 +388,34 @@
 </div>
 
 <div class="wrap" style="grid-template-columns:1fr;padding-top:0">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <h3 style="margin:0">Auftragsdaten</h3>
+        <p class="sub" style="margin:2px 0 0">Woher die Bestellung kommt und für wen sie ist.</p>
+      </div>
+      <button class="chev" id="btnOrderData" aria-label="Auftragsdaten ein-/ausklappen" aria-expanded="false">▸</button>
+    </div>
+    <div id="orderDataBody" style="display:none;margin-top:18px">
+      <div class="row">
+        <div>
+          <label for="platform">Plattform</label>
+          <select id="platform">
+            <option>eBay</option><option>Etsy</option><option>Amazon</option>
+            <option>Direktanfrage</option><option>Sonstige</option>
+          </select>
+        </div>
+        <div><label for="orderId">Bestellnummer</label><input id="orderId" placeholder="z. B. 14-13454-98123"></div>
+      </div>
+      <div class="row">
+        <div><label for="buyer">Käufer</label><input id="buyer" placeholder="Name / Nutzername"></div>
+        <div><label for="due">Liefern bis</label><input id="due" type="date"></div>
+      </div>
+      <label for="notes">Notizen</label>
+      <textarea id="notes" placeholder="Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
+    </div>
+  </div>
+
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
       <div>
@@ -495,23 +461,11 @@
 "use strict";
 
 /* ---------- Stammdaten ---------- */
-const DEFAULT_MATERIALS = [
-  {name:"PLA",        price:22, dens:1.24, speed:1.00},
-  {name:"PETG",       price:26, dens:1.27, speed:0.85},
-  {name:"ABS",        price:24, dens:1.04, speed:0.85},
-  {name:"ASA",        price:32, dens:1.07, speed:0.80},
-  {name:"TPU 95A",    price:38, dens:1.21, speed:0.45},
-  {name:"Nylon PA12", price:55, dens:1.01, speed:0.70},
-  {name:"PLA Holz",   price:34, dens:1.15, speed:0.85},
-  {name:"PLA Silk",   price:28, dens:1.24, speed:0.95},
-  {name:"PLA-CF",     price:45, dens:1.22, speed:0.85},
-  {name:"PETG-CF",    price:52, dens:1.30, speed:0.80}
-];
-
 // Offizielle Bambu-Lab-Farbtabellen (store.bblcdn.com/.eu, Stand 20. Juli 2026).
-// price = grober EU-Richtwert €/kg je Linie, zur Orientierung — bei Bedarf hier anpassen.
+// price = grober EU-Richtwert €/kg je Linie; dens/speed = Materialwerte der Linie
+// (speed relativ zu PLA Basic = 1,0) — alles Richtwerte, bei Bedarf hier anpassen.
 const PALETTE_LINES = [
-  { line:"PLA Basic", price:22, colors:[
+  { line:"PLA Basic", price:22, dens:1.24, speed:1.00, colors:[
     ["Jade White","#FFFFFF"],["Beige","#F7E6DE"],["Light Gray","#D1D3D5"],["Silver","#A6A9AA"],["Gray","#8E9089"],
     ["Magenta","#EC008C"],["Pink","#F55A74"],["Hot Pink","#F5547C"],["Orange","#FF6A13"],["Pumpkin Orange","#FF9016"],
     ["Gold","#E4BD68"],["Sunflower Yellow","#FEC600"],["Yellow","#F4EE2A"],["Bright Green","#BECF00"],["Bambu Green","#00AE42"],
@@ -519,7 +473,7 @@ const PALETTE_LINES = [
     ["Red","#C12E1F"],["Turquoise","#00B1B7"],["Cyan","#0086D6"],["Blue","#0A2989"],["Cobalt Blue","#0056B8"],
     ["Purple","#5E43B7"],["Indigo Purple","#482960"],["Blue Grey","#5B6579"],["Dark Gray","#545454"],["Black","#000000"]
   ]},
-  { line:"PLA Matte", price:23, colors:[
+  { line:"PLA Matte", price:23, dens:1.24, speed:1.00, colors:[
     ["Ivory White","#FFFFFF"],["Bone White","#CBC6B8"],["Desert Tan","#E8DBB7"],["Latte Brown","#D3B7A7"],
     ["Caramel","#AE835B"],["Terracotta","#B15533"],["Dark Brown","#7D6556"],["Dark Chocolate","#4D3324"],
     ["Lilac Purple","#AE96D4"],["Sakura Pink","#E8AFCF"],["Mandarin Orange","#F99963"],["Lemon Yellow","#F7D959"],
@@ -528,51 +482,39 @@ const PALETTE_LINES = [
     ["Marine Blue","#0078BF"],["Dark Blue","#042F56"],["Ash Gray","#9B9EA0"],["Nardo Gray","#757575"],
     ["Charcoal","#000000"]
   ]},
-  { line:"PLA-CF", price:32, colors:[
+  { line:"PLA-CF", price:32, dens:1.20, speed:0.85, colors:[
     ["Burgundy Red","#951E23"],["Iris Purple","#69398E"],["Matcha Green","#5C9748"],
     ["Jeans Blue","#6E88BC"],["Royal Blue","#2842AD"],["Lava Gray","#4D5054"],["Black","#000000"]
   ]},
-  { line:"PLA Translucent", price:25, colors:[
+  { line:"PLA Translucent", price:25, dens:1.24, speed:0.90, colors:[
     ["Teal","#009FA1"],["Light Jade","#96D8AF"],["Blue","#0047BB"],["Mellow Yellow","#F5DBAB"],["Purple","#8344B0"],
     ["Cherry Pink","#F5B6CD"],["Orange","#F74E02"],["Ice Blue","#B8CDE9"],["Red","#B50011"],["Lavender","#B8ACD6"]
   ]},
-  { line:"PLA Pure", price:24, colors:[
+  { line:"PLA Pure", price:24, dens:1.24, speed:1.00, colors:[
     ["Pure White","#FFFFFF"],["Absolute Black","#000000"],["Baby Blue","#A4DBE8"],["Milky Pink","#F7CED7"],["Apricot","#FFB673"]
   ]},
-  { line:"PETG Basic", price:23, colors:[
+  { line:"PETG Basic", price:23, dens:1.27, speed:0.85, colors:[
     ["Red","#D6001C"],["Yellow","#FCE300"],["Reflex Blue","#001489"],["Black","#000000"],
     ["Gray","#7F7E83"],["Dark Brown","#4F2C1D"],["White","#FFFFFF"]
   ]},
-  { line:"PETG-CF", price:23, colors:[
+  { line:"PETG-CF", price:23, dens:1.25, speed:0.80, colors:[
     ["Brick Red","#9F332A"],["Violet Purple","#583061"],["Indigo Blue","#324585"],
     ["Malachite Green","#16B08E"],["Black","#000000"],["Titan Gray","#565656"]
   ]}
 ];
-const PALETTE = PALETTE_LINES.flatMap(g => g.colors.map(([n,c]) => ({n, c, line:g.line, price:g.price})));
+const PALETTE = PALETTE_LINES.flatMap(g =>
+  g.colors.map(([n,c]) => ({n, c, line:g.line, price:g.price, dens:g.dens, speed:g.speed})));
 
 const PLATFORM_FEE = { "eBay":0.11, "Etsy":0.095, "Amazon":0.15, "Direktanfrage":0, "Sonstige":0 };
 const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
-const MATERIALS_KEY = "druckauftrag.materials.v1";
 const MESHES_KEY = "druckauftrag.meshes.v1";
 const ORDER_STATUS = ["offen","gedruckt","versendet","bezahlt"];
 
-// Jans eigene Einkaufspreise, falls einmal als Standard gesichert — sonst die Marktschätzungen
-function loadUserMaterials(){
-  try {
-    const m = JSON.parse(localStorage.getItem(MATERIALS_KEY));
-    if (Array.isArray(m) && m.length) return m.map(x => ({...x}));
-  } catch(e){}
-  return null;
-}
-function baselineMaterials(){ return loadUserMaterials() || DEFAULT_MATERIALS.map(m => ({...m})); }
-
 /* ---------- Zustand ---------- */
 let mesh = null;
-let materials = baselineMaterials();
-let matIdx = 0;
-let color = {n:PALETTE[0].n, c:PALETTE[0].c};
+let color = {...PALETTE[0]};
 let spin = true, rotX = -1.05, rotY = 0.6, zoom = 1, drag = null;
 
 const $ = id => document.getElementById(id);
@@ -789,8 +731,7 @@ function parseSlicerTime(s){
 
 function calc(){
   if (!mesh) return null;
-  const mat = materials[matIdx];
-  if (!mat) return null;
+  const mat = color;
   const s = (+$("scale").value||100)/100;
   const infill = +$("infill").value/100;
   const layer  = +$("layer").value;
@@ -998,75 +939,17 @@ function clearMesh(){
 }
 $("btnClear").onclick = clearMesh;
 
-/* ---------- Material ---------- */
-function syncMatSelect(){
-  $("material").innerHTML = materials
-    .map((m,i) => `<option value="${i}"${i===matIdx?" selected":""}>${esc(m.name||"Ohne Namen")} — ${eur(+m.price||0)}/kg</option>`)
-    .join("");
-}
-
-function drawMatRows(){
-  $("matRows").innerHTML = materials.map((m,i) => `
-    <div class="mrow${i===matIdx?" active":""}" data-i="${i}">
-      <input data-k="name"  value="${esc(m.name)}" aria-label="Name">
-      <input data-k="price" class="n" type="number" step="0.5" min="0" value="${m.price}" aria-label="Preis">
-      <input data-k="dens"  class="n" type="number" step="0.01" min="0.1" value="${m.dens}" aria-label="Dichte">
-      <input data-k="speed" class="n" type="number" step="0.05" min="0.1" value="${m.speed}" aria-label="Tempo">
-      <button class="del" data-del="${i}" title="Löschen">&times;</button>
-    </div>`).join("");
-
-  $("matRows").querySelectorAll("input").forEach(inp => {
-    inp.oninput = () => {
-      const i = +inp.closest(".mrow").dataset.i, k = inp.dataset.k;
-      materials[i][k] = k === "name" ? inp.value : (+inp.value || 0);
-      syncMatSelect(); render();
-    };
-  });
-  $("matRows").querySelectorAll(".del").forEach(b => b.onclick = () => {
-    if (materials.length === 1){
-      const w=$("warn"); w.className="warnbox show";
-      w.textContent="Mindestens ein Material muss übrig bleiben."; return;
-    }
-    const i = +b.dataset.del;
-    materials.splice(i,1);
-    if (matIdx >= materials.length) matIdx = materials.length-1;
-    else if (matIdx > i) matIdx--;
-    syncMatSelect(); drawMatRows(); render();
-  });
-}
-
-$("material").onchange = e => { matIdx = +e.target.value; drawMatRows(); render(); };
-$("btnMat").onclick = () => {
-  const open = $("matBox").style.display === "block";
-  $("matBox").style.display = open ? "none" : "block";
-  $("btnMat").textContent = open ? "Bearbeiten" : "Fertig";
-};
 $("btnCalcBase").onclick = () => {
   const open = $("calcBaseBody").style.display === "block";
   $("calcBaseBody").style.display = open ? "none" : "block";
   $("btnCalcBase").classList.toggle("open", !open);
   $("btnCalcBase").setAttribute("aria-expanded", String(!open));
 };
-$("btnMatAdd").onclick = () => {
-  materials.push({name:"Neues Material", price:25, dens:1.24, speed:1});
-  matIdx = materials.length-1;
-  syncMatSelect(); drawMatRows(); render();
-  const last = $("matRows").lastElementChild.querySelector("input");
-  last.focus(); last.select();
-};
-$("btnMatSave").onclick = () => {
-  let ok = false;
-  try { localStorage.setItem(MATERIALS_KEY, JSON.stringify(materials)); ok = true; } catch(e){}
-  flash($("btnMatSave"), ok ? "Gemerkt ✓" : "Nicht gespeichert");
-};
-$("btnMatReset").onclick = () => {
-  materials = baselineMaterials(); matIdx = 0;
-  syncMatSelect(); drawMatRows(); render();
-};
-$("btnMatFactory").onclick = () => {
-  materials = DEFAULT_MATERIALS.map(m=>({...m})); matIdx = 0;
-  syncMatSelect(); drawMatRows(); render();
-  flash($("btnMatFactory"), "Marktwerte geladen ✓");
+$("btnOrderData").onclick = () => {
+  const open = $("orderDataBody").style.display === "block";
+  $("orderDataBody").style.display = open ? "none" : "block";
+  $("btnOrderData").classList.toggle("open", !open);
+  $("btnOrderData").setAttribute("aria-expanded", String(!open));
 };
 
 /* ---------- Farbe ---------- */
@@ -1075,15 +958,18 @@ function drawSwatches(){
     <div class="palgroup">
       <div class="palhead"><span class="name">${esc(g.line)}</span><span class="price">${eur(g.price)}/kg</span></div>
       <div class="swatches">
-        ${g.colors.map(([n,c]) => `<div class="sw${c===color.c&&n===color.n?" on":""}" data-n="${esc(n)}" data-c="${c}"
+        ${g.colors.map(([n,c]) => `<div class="sw${c===color.c&&n===color.n&&g.line===color.line?" on":""}"
+                    data-n="${esc(n)}" data-c="${c}" data-line="${esc(g.line)}"
                     style="background:${c}" title="${esc(n)}"></div>`).join("")}
       </div>
     </div>`).join("");
   $("paletteGroups").querySelectorAll(".sw").forEach(el => el.onclick = () => {
-    color = {n:el.dataset.n, c:el.dataset.c}; drawSwatches();
+    const found = PALETTE.find(o => o.n===el.dataset.n && o.c===el.dataset.c && o.line===el.dataset.line);
+    if (found) color = {...found};
+    drawSwatches(); render();
   });
   $("cName").textContent = color.n;
-  $("cHex").textContent  = color.c.toUpperCase();
+  $("cHex").textContent  = color.c.toUpperCase()+" · "+color.line;
 }
 
 /* ---------- Eingaben ---------- */
@@ -1104,7 +990,7 @@ const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","wal
                 "supPct","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
 
 function snapshot(embedMesh = true){
-  const d = { v:2, saved:new Date().toISOString(), color, materials, matIdx,
+  const d = { v:2, saved:new Date().toISOString(), color,
               support:$("support").classList.contains("on"), fields:{} };
   FIELDS.forEach(f => d.fields[f] = $(f).value);
   if (mesh){
@@ -1154,8 +1040,7 @@ $("btnLoad").onclick = () => {
 // alles übernehmen, was sich zuordnen lässt; der Rest fällt auf die Standardwerte zurück.
 function migrateV1(d){
   const src = d.fields || d;
-  const out = { v:2, color:d.color, materials:d.materials, matIdx:d.matIdx,
-                support:d.support, fields:{} };
+  const out = { v:2, color:d.color, support:d.support, fields:{} };
   FIELDS.forEach(f => { if (src[f] !== undefined) out.fields[f] = src[f]; });
   if (d.mesh) out.mesh = d.mesh;
   return out;
@@ -1166,8 +1051,6 @@ function applyState(d){
   if (d.v === 1) d = migrateV1(d);
   else if (d.v !== 2) throw new Error("Dieser Stand stammt aus einer neueren Version (v"+d.v+"). Bitte die Anwendung aktualisieren.");
   FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
-  if (Array.isArray(d.materials) && d.materials.length) materials = d.materials.map(m=>({...m}));
-  matIdx = Math.min(d.matIdx ?? 0, materials.length-1);
   if (d.color && d.color.c) color = d.color;
 
   $("support").classList.toggle("on", !!d.support);
@@ -1186,7 +1069,7 @@ function applyState(d){
   $("lInfill").textContent = $("infill").value+" %";
   $("lLayer").textContent  = num(+$("layer").value,2)+" mm";
   $("lSup").textContent    = $("supPct").value+" %";
-  syncMatSelect(); drawMatRows(); drawSwatches(); render();
+  drawSwatches(); render();
 }
 
 // innerHTML sichern, sonst gehen die Kurz-/Langbeschriftungen beim Zurücksetzen verloren
@@ -1224,7 +1107,7 @@ $("btnPdf").onclick = () => {
           ${row("Dreiecke", mesh.tricount.toLocaleString("de-DE"))}
           ${row("Abmessungen", r.size.map(v=>num(v,1)).join(" × ")+" mm")}
           ${row("Skalierung", esc(g("scale"))+" %")}
-          ${row("Material", esc(r.mat.name)+" · "+eur(+r.mat.price||0)+"/kg")}
+          ${row("Material", esc(r.mat.line||"–")+" · "+eur(+r.mat.price||0)+"/kg")}
           ${row("Farbe", esc(color.n)+" ("+color.c.toUpperCase()+")")}
           ${row("Füllung", num(r.infill*100,0)+" %")}
           ${row("Schichthöhe", num(r.layer,2)+" mm")}
@@ -1608,7 +1491,7 @@ addEventListener("keydown", e => { if (e.key === "Escape") modalHide(); });
 $("btnImport").onclick = openImport;
 
 /* ---------- Start ---------- */
-syncMatSelect(); drawMatRows(); drawSwatches(); render();
+drawSwatches(); render();
 loadOrders(); drawOrders();
 try { const s = localStorage.getItem(STORE_KEY); if (s) applyState(JSON.parse(s)); } catch(e){}
 </script>
