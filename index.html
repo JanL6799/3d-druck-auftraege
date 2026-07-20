@@ -927,7 +927,7 @@ function draw(){
   const S = Math.min(W,H) * 0.62 * zoom, ox = W/2, oy = H/2;
   const n = view.length/9;
   const depth = new Float32Array(n), idx = new Uint32Array(n);
-  const px = new Float32Array(n*6), sh = new Float32Array(n);
+  const px = new Float32Array(n*6), sh = new Float32Array(n), area = new Float32Array(n);
 
   for (let i=0;i<n;i++){
     let dz=0; const p=[];
@@ -941,8 +941,10 @@ function draw(){
     for (let k=0;k<6;k++) px[i*6+k] = p[k];
     depth[i] = dz/3; idx[i] = i;
     const ux=p[2]-p[0], uy=p[3]-p[1], vx=p[4]-p[0], vy=p[5]-p[1];
+    const cross = ux*vy - uy*vx;
     const len = Math.hypot(ux,uy) * Math.hypot(vx,vy) || 1;
-    sh[i] = 0.42 + 0.58 * Math.min(1, Math.abs(ux*vy - uy*vx)/len);
+    sh[i] = 0.42 + 0.58 * Math.min(1, Math.abs(cross)/len);
+    area[i] = Math.abs(cross) / 2;
   }
 
   idx.sort((a,b) => depth[a]-depth[b]);
@@ -957,11 +959,15 @@ function draw(){
     ctx.lineTo(px[i*6+2],px[i*6+3]);
     ctx.lineTo(px[i*6+4],px[i*6+5]);
     ctx.closePath(); ctx.fill();
-    // Dünne Kontur je Dreieck — sonst verschwinden helle Farben (z.B. Jade White) fast im
-    // Canvas-Hintergrund und dunkle Farben in der eigenen Schattenseite.
-    ctx.strokeStyle = "rgba(0,0,0,.16)";
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
+    // Kontur nur bei ausreichend großen Dreiecken — sonst wirken feine Meshes (viele tausend
+    // kleine Dreiecke) durch lauter überlappende Konturlinien wie ein Punkteraster statt
+    // glatter Flächen. Bei wenigen großen Dreiecken (z.B. ein simpler Würfel) bleibt sie sichtbar
+    // und hebt helle Farben (Jade White) vom Hintergrund und dunkle von der eigenen Schattenseite ab.
+    if (area[i] > 10){
+      ctx.strokeStyle = "rgba(0,0,0,.16)";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
   }
 }
 (function loop(){ if (spin && !drag && view) rotY += 0.006; draw(); requestAnimationFrame(loop); })();
@@ -1271,7 +1277,12 @@ $("btnMail").onclick = () => {
   const stlName = mesh.name.replace(/\.(stl|3mf)$/i,"") + ".stl";
   downloadBlob(meshToSTLBlob(mesh.tris, mesh.name), stlName);
   const standName = "stand-"+(g("orderId") || new Date().toISOString().slice(0,10))+".json";
-  downloadBlob(new Blob([JSON.stringify(snapshot())],{type:"application/json"}), standName);
+  // Ohne Geometrie — die liegt schon als STL bei, eingebettet wäre der Stand bei großen
+  // Modellen mehrere MB groß (jeder Vertex dreifach als Zahl im JSON).
+  const stand = snapshot();
+  delete stand.mesh; delete stand.meshHash;
+  stand.meshFile = stlName;
+  downloadBlob(new Blob([JSON.stringify(stand)],{type:"application/json"}), standName);
 
   const lines = [
     `Datei: ${stlName} und ${standName} wurden gerade heruntergeladen — bitte beide an diese Mail anhängen.`,
