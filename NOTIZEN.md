@@ -1,6 +1,6 @@
 # 3D-Druck Auftragserfassung
 
-Stand: 19. Juli 2026
+Stand: 21. Juli 2026
 
 Werkzeug zum Erfassen und Kalkulieren von 3D-Druckaufträgen, die über eBay, Etsy oder Amazon
 hereinkommen. STL/3MF laden → Material und Farbe wählen → Preis → Auftragsblatt als PDF.
@@ -173,19 +173,25 @@ Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, B
 
 ## Verifiziert
 
-Die früheren Ad-hoc-Prüfungen sind jetzt **16 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
+Die früheren Ad-hoc-Prüfungen sind jetzt **21 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
 die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Abgedeckt:
 
 - Testwürfel 20 mm → **exakt 8000 mm³** über STL- und 3MF-Pfad, inklusive Abmessungen.
 - Wasserdichtheit: intakter Würfel warnt nicht, Würfel mit fehlendem Dreieck warnt.
+- 3MF mit ausgelagerter Objektdatei (Production Extension, z. B. aus Bambu Studio) wird
+  korrekt aufgelöst.
 - Slicer-Zeit `2:30` übersteuert die Schätzung („2 h 30 min · Slicer“) und lässt sich leeren.
 - Bauraum-Warnung inkl. 90°-Rotationslogik (12 × 30 passt, 12 × 20 nicht).
 - CSV-Import filtert Duplikate/Leerzeilen; Klick lädt Bestellnummer und Käufer.
+- Auftragsänderung löst einen Server-Backup-Versuch aus (`POST /api/backup`, fire-and-forget).
 - Status weiterschalten + Filter-Chips + Suche.
 - Auftrag sichern legt `meshHash` statt eingebetteter Geometrie ab, Mesh-Speicher gefüllt.
 - Duplizieren übernimmt das Modell, leert Käufer/Bestellnummer.
 - Backup-Restore übernimmt neue Aufträge und überspringt bekannte IDs.
-- Eigene Materialpreise überleben einen Reload; „Marktwerte laden“ stellt Schätzwerte her.
+- Farbwahl legt das Material (und damit den Materialpreis) für die Kalkulation fest.
+- Mail-Versand: „Per Mail senden“ schickt Auftrag inkl. echtem STL- und Stand-JSON-Anhang an
+  `/api/send-mail`; ohne geladenes Modell erscheint stattdessen eine Warnung.
+- Darstellung-Umschalter merkt sich die Wahl über einen Reload.
 - v1-Stand migriert, neuere Formate werden mit klarer Meldung abgelehnt.
 - Kein einziger JS-Fehler im gesamten Lauf.
 
@@ -201,14 +207,14 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    die JSON-Datei in sich vollständig ist. Nur die Auftragsliste dedupliziert über den
    Mesh-Speicher. Sehr große Modelle können den `localStorage`-Autosave weiterhin sprengen
    (still abgefangen, der Download klappt trotzdem).
-4. **v1-Migration ist Best-effort.** `migrateV1()` übernimmt Felder aus einem flachen v1-Objekt;
+3. **v1-Migration ist Best-effort.** `migrateV1()` übernimmt Felder aus einem flachen v1-Objekt;
    was v1 nicht gespeichert hat, kann sie nicht rekonstruieren.
-5. **3MF: Farb- und Materialdaten werden ignoriert** — nur die Geometrie zählt für die
+4. **3MF: Farb- und Materialdaten werden ignoriert** — nur die Geometrie zählt für die
    Kalkulation. Einheiten (`unit`-Attribut) und Prefix-Namespaces werden inzwischen korrekt
    behandelt.
-6. **Der Wasserdichtheits-Check pausiert ab 300.000 Dreiecken** (sonst hakt das Laden); sehr
+5. **Der Wasserdichtheits-Check pausiert ab 300.000 Dreiecken** (sonst hakt das Laden); sehr
    große Meshes werden also ungeprüft kalkuliert.
-7. **Der CSV-Import erkennt Spalten über gängige Kopfzeilen-Namen** (Order number/Bestellnummer,
+6. **Der CSV-Import erkennt Spalten über gängige Kopfzeilen-Namen** (Order number/Bestellnummer,
    Buyer/Käufer …). Exotische oder umbenannte Exporte werden nicht gefunden — dann bleibt das
    Einfügefeld für manuelles Nacharbeiten.
 
