@@ -13,6 +13,7 @@ CSV-Import, raus geht es per Backup-JSON und Umsatz-CSV.
 |---|---|
 | `index.html` | Die komplette Anwendung — Doppelklick genügt |
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup + Mail-Versand), siehe unten |
+| `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
 | `tests/e2e.mjs` | 21 Playwright-Tests, fahren die App headless durch |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
@@ -87,6 +88,12 @@ lokalen Doppelklick-Nutzung. Setup:
   ```
   Danach `sudo systemctl daemon-reload && sudo systemctl enable --now druckauftrag-backup`
   und `sudo systemctl reload nginx`.
+
+  `deploy/setup-mail-feature.sh` automatisiert genau diese drei Schritte (Webroot-Kopie,
+  Unit-Umstellung inkl. `RESEND_API_KEY`-Abfrage, nginx-Route) für den Fall, dass die Mail-
+  Route je neu aufgesetzt werden muss — `BACKUP_SECRET`/`BACKUP_DIR` übernimmt es unverändert
+  aus der laufenden Unit, fragt nur den Resend-Key interaktiv ab (landet nirgends im Klartext
+  im Repo oder in einer Konversation). Aufruf: `sudo bash deploy/setup-mail-feature.sh`.
 
 **Kein `build_standalone.py` wie in den anderen Ordnern.** Diese Seite wurde von vornherein als
 vollständiges HTML-Dokument mit eigenem `<head>` geschrieben, nicht als Artifact-Quelle. Sie hat
@@ -219,6 +226,18 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Neunte Runde (22. Juli 2026):
+
+1. **Pi-seitiges Setup zur achten Runde nachgezogen.** Der Mail-PR (#16) war gemergt, aber
+   drei Schritte auf dem Pi standen noch aus: `index.html` im Webroot war noch der alte
+   mailto:-Stand, die systemd-Unit zeigte noch auf das umbenannte `server/backup-server.js`
+   (lief unbemerkt auf dem alten, bereits gelöschten Datei-Handle weiter) ohne
+   `RESEND_API_KEY`, und nginx kannte nur `/api/backup`, nicht `/api/send-mail`. Alle drei
+   Schritte jetzt nachgeholt, `deploy/setup-mail-feature.sh` dafür ergänzt (siehe „Deployment").
+2. Verifiziert über `curl -X POST .../api/send-mail` mit leerem Body — lieferte den
+   erwarteten Pflichtfelder-Fehler statt eines nginx-404, also Route + neuer Code + Key
+   bestätigt aktiv.
 
 Achte Runde (20. Juli 2026):
 
