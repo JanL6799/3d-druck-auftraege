@@ -1,13 +1,20 @@
 // Ende-zu-Ende-Tests der 3D-Druck-Auftragserfassung.
-// Läuft headless gegen die lokale index.html — kein Server nötig.
+// Läuft headless gegen die lokalen index.html/backend.html — kein Server nötig.
 //   npm install && npx playwright install chromium && npm test
+//
+// index.html (öffentliche Seite): Modell, Kalkulation, Material, PDF, Mail — läuft gegen `page`.
+// backend.html (Kalkulationsbasis, Auftragsdaten, Aufträge — nur intern): läuft gegen `pageB`.
+// Beide teilen sich dieselbe Rechenlogik und denselben localStorage-Origin, sind aber getrennte
+// Seiten seit der Aufteilung in öffentliche Kundenseite und internes Backend.
 import { chromium } from 'playwright';
 import { deflateRawSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const INDEX = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'index.html')).href;
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const INDEX = pathToFileURL(path.join(HERE, '..', 'index.html')).href;
+const BACKEND = pathToFileURL(path.join(HERE, '..', 'backend.html')).href;
 
 /* ---------- Testdaten ---------- */
 
@@ -133,19 +140,22 @@ const CSV = `Order Number;Buyer Username;Item Title
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
+const pageB = await browser.newPage();
 const jsErrors = [];
-page.on('pageerror', e => jsErrors.push(e.message));
+page.on('pageerror', e => jsErrors.push('[index] ' + e.message));
+pageB.on('pageerror', e => jsErrors.push('[backend] ' + e.message));
 await page.goto(INDEX);
+await pageB.goto(BACKEND);
 
 const results = [];
 async function test(name, fn){
   try { await fn(); results.push(['ok  ', name]); }
   catch(e){ results.push(['FAIL', name + ' — ' + e.message]); }
 }
-const loadStl = async (txt, name) => page.evaluate(
+const loadStl = async (txt, name, pg=page) => pg.evaluate(
   async ({txt, name}) => { await window.loadFile(new File([txt], name)); }, {txt, name});
-const text = sel => page.textContent(sel);
-const warnShown = () => page.$eval('#warn', el => el.classList.contains('show'));
+const text = (sel, pg=page) => pg.textContent(sel);
+const warnShown = (pg=page) => pg.$eval('#warn', el => el.classList.contains('show'));
 
 await test('STL-Würfel 20 mm → exakt 8000 mm³', async () => {
   await loadStl(boxSTL(20,20,20), 'cube.stl');
@@ -193,29 +203,29 @@ await test('Slicer-Zeit übersteuert die Schätzung', async () => {
 });
 
 await test('Bauraum-Warnung berücksichtigt 90°-Drehung', async () => {
-  await loadStl(boxSTL(25,10,5), 'brick.stl');
-  await page.click('#btnCalcBase');           // Kalkulationsbasis ist standardmäßig eingeklappt
+  await loadStl(boxSTL(25,10,5), 'brick.stl', pageB);
+  await pageB.click('#btnCalcBase');           // Kalkulationsbasis ist standardmäßig eingeklappt
   const setBed = async (x,y,z) => {
-    for (const [id,v] of [['bx',x],['by',y],['bz',z]]) await page.fill('#'+id, String(v));
+    for (const [id,v] of [['bx',x],['by',y],['bz',z]]) await pageB.fill('#'+id, String(v));
   };
   await setBed(12,30,50);                 // passt nur gedreht
-  assert.equal(await warnShown(), false);
+  assert.equal(await warnShown(pageB), false);
   await setBed(12,20,50);                 // passt auch gedreht nicht
-  assert.match(await text('#warn'), /überschreitet/);
+  assert.match(await text('#warn', pageB), /überschreitet/);
   await setBed(256,256,256);
 });
 
 await test('CSV-Import: 3 Aufträge, Duplikate und Leerzeilen gefiltert', async () => {
-  await page.click('#btnOrders');           // Aufträge ist standardmäßig eingeklappt
-  await page.click('#btnImport');
-  await page.fill('#impText', CSV);
-  await page.click('#impParse');
-  await page.click('#impDo');
-  assert.equal(await page.$$eval('.oitem', els => els.length), 3);
+  await pageB.click('#btnOrders');           // Aufträge ist standardmäßig eingeklappt
+  await pageB.click('#btnImport');
+  await pageB.fill('#impText', CSV);
+  await pageB.click('#impParse');
+  await pageB.click('#impDo');
+  assert.equal(await pageB.$$eval('.oitem', els => els.length), 3);
 });
 
 await test('Auftragsänderung löst Server-Backup-Versuch aus (fire-and-forget)', async () => {
-  const call = await page.evaluate(() => {
+  const call = await pageB.evaluate(() => {
     const orig = window.fetch;
     let captured = null;
     window.fetch = (url, opts) => { captured = { url, opts }; return Promise.reject(new Error('kein Server im Test')); };
@@ -230,31 +240,31 @@ await test('Auftragsänderung löst Server-Backup-Versuch aus (fire-and-forget)'
 });
 
 await test('Auftrag anklicken lädt Bestellnummer und Käufer', async () => {
-  await page.locator('.oitem', { hasText: '88-00011-22233' }).click();
-  assert.equal(await page.inputValue('#orderId'), '88-00011-22233');
-  assert.equal(await page.inputValue('#buyer'), 'lisa_k');
+  await pageB.locator('.oitem', { hasText: '88-00011-22233' }).click();
+  assert.equal(await pageB.inputValue('#orderId'), '88-00011-22233');
+  assert.equal(await pageB.inputValue('#buyer'), 'lisa_k');
 });
 
 await test('Status weiterschalten und filtern', async () => {
-  await page.click('.oitem .stbadge');    // offen → gedruckt
-  await page.click('.fchip[data-f="gedruckt"]');
-  assert.equal(await page.$$eval('.oitem', els => els.length), 1);
-  await page.click('.fchip[data-f="alle"]');
-  assert.equal(await page.$$eval('.oitem', els => els.length), 3);
+  await pageB.click('.oitem .stbadge');    // offen → gedruckt
+  await pageB.click('.fchip[data-f="gedruckt"]');
+  assert.equal(await pageB.$$eval('.oitem', els => els.length), 1);
+  await pageB.click('.fchip[data-f="alle"]');
+  assert.equal(await pageB.$$eval('.oitem', els => els.length), 3);
 });
 
 await test('Suche filtert die Liste', async () => {
-  await page.fill('#oSearch', 'lisa');
-  assert.equal(await page.$$eval('.oitem', els => els.length), 1);
-  await page.fill('#oSearch', '');
-  assert.equal(await page.$$eval('.oitem', els => els.length), 3);
+  await pageB.fill('#oSearch', 'lisa');
+  assert.equal(await pageB.$$eval('.oitem', els => els.length), 1);
+  await pageB.fill('#oSearch', '');
+  assert.equal(await pageB.$$eval('.oitem', els => els.length), 3);
 });
 
 await test('Sichern dedupliziert Geometrie über den Mesh-Speicher', async () => {
   // Der Auftragsklick oben hat das Modell korrekt geleert — für diesen Test frisch laden
-  await loadStl(boxSTL(25,10,5), 'brick.stl');
-  await page.click('#btnOrderSave');
-  const r = await page.evaluate(() => {
+  await loadStl(boxSTL(25,10,5), 'brick.stl', pageB);
+  await pageB.click('#btnOrderSave');
+  const r = await pageB.evaluate(() => {
     const orders = JSON.parse(localStorage.getItem('druckauftrag.orders.v1'));
     const withRef = orders.filter(o => o.snapshot && o.snapshot.meshHash).length;
     const embedded = orders.filter(o => o.snapshot && o.snapshot.mesh).length;
@@ -267,15 +277,15 @@ await test('Sichern dedupliziert Geometrie über den Mesh-Speicher', async () =>
 });
 
 await test('Duplizieren: Modell bleibt, Käufer/Bestellnummer leer', async () => {
-  const before = await page.$$eval('.oitem', els => els.length);
-  await page.click('.oitem [data-dup]');
-  assert.equal(await page.$$eval('.oitem', els => els.length), before + 1);
-  assert.equal(await page.inputValue('#orderId'), '');
-  assert.equal(await page.inputValue('#buyer'), '');
+  const before = await pageB.$$eval('.oitem', els => els.length);
+  await pageB.click('.oitem [data-dup]');
+  assert.equal(await pageB.$$eval('.oitem', els => els.length), before + 1);
+  assert.equal(await pageB.inputValue('#orderId'), '');
+  assert.equal(await pageB.inputValue('#buyer'), '');
 });
 
 await test('Backup-Restore übernimmt neue Aufträge, überspringt bekannte', async () => {
-  const added = await page.evaluate(() => applyBackup({
+  const added = await pageB.evaluate(() => applyBackup({
     v:1, type:'druckauftrag-backup',
     orders:[{ id:'restore-test-1', saved:new Date().toISOString(), platform:'eBay',
               orderId:'T-1', buyer:'tester', priceText:'', status:'offen',
@@ -283,7 +293,7 @@ await test('Backup-Restore übernimmt neue Aufträge, überspringt bekannte', as
     meshes:{}
   }));
   assert.equal(added, 1);
-  const again = await page.evaluate(() => applyBackup({
+  const again = await pageB.evaluate(() => applyBackup({
     v:1, type:'druckauftrag-backup',
     orders:[{ id:'restore-test-1', snapshot:{v:2, fields:{}} }], meshes:{}
   }));
@@ -331,18 +341,48 @@ await test('Mail-Button warnt ohne geladenes Modell', async () => {
   assert.match(await text('#warn'), /zuerst eine STL- oder 3MF-Datei laden/);
 });
 
+// migrateV1()/applyState() sind dieselbe Funktion auf beiden Seiten, nur mit einer kürzeren
+// FIELDS-Liste auf index.html (kein buyer/orderId dort mehr) — ein voller Migrationstest lohnt
+// sich nur im Backend, wo alle Felder existieren. Die v3-Ablehnung ist seitenunabhängig,
+// bleibt aber hier gleich mitgetestet statt eines eigenen, fast identischen Tests auf index.html.
 await test('v1-Stand lädt (Migration), neuere Version wird abgelehnt', async () => {
-  const v1 = await page.evaluate(() => {
+  const v1 = await pageB.evaluate(() => {
     window.applyState({ v:1, buyer:'altkunde', orderId:'V1-001', infill:'55', qty:'3' });
     return { buyer: document.getElementById('buyer').value,
              qty: document.getElementById('qty').value };
   });
   assert.equal(v1.buyer, 'altkunde');
   assert.equal(v1.qty, '3');
-  const msg = await page.evaluate(() => {
+  const msg = await pageB.evaluate(() => {
     try { window.applyState({v:3}); return null; } catch(e){ return e.message; }
   });
   assert.match(msg, /neueren Version/);
+});
+
+// Dieselbe v1-Migration, aber mit der kürzeren FIELDS-Liste von index.html: buyer/orderId
+// existieren dort nicht mehr, infill/qty aber schon.
+await test('v1-Stand lädt (Migration) auch mit der kürzeren Feldliste von index.html', async () => {
+  const v1 = await page.evaluate(() => {
+    window.applyState({ v:1, buyer:'altkunde', orderId:'V1-001', infill:'55', qty:'3' });
+    return { infill: document.getElementById('infill').value,
+             qty: document.getElementById('qty').value };
+  });
+  assert.equal(v1.infill, '55');
+  assert.equal(v1.qty, '3');
+});
+
+await test('index.html: Mail ist hervorgehoben und steht nach PDF, Backend-Blöcke fehlen', async () => {
+  const order = await page.$$eval('header .stack button', els => els.map(el => el.id));
+  assert.ok(order.indexOf('btnPdf') < order.indexOf('btnMail'), 'PDF steht vor Mail');
+  assert.equal(await page.getAttribute('#btnPdf', 'class'), 'sm');
+  assert.match(await page.getAttribute('#btnMail', 'class'), /primary/);
+  for (const id of ['calcBaseBody', 'orderDataBody', 'ordersBody', 'modal'])
+    assert.equal(await page.$(`#${id}`), null, `#${id} sollte auf index.html nicht existieren`);
+});
+
+await test('backend.html: Kalkulationsbasis/Auftragsdaten/Aufträge sind vorhanden', async () => {
+  for (const id of ['calcBaseBody', 'orderDataBody', 'ordersBody'])
+    assert.notEqual(await pageB.$(`#${id}`), null, `#${id} sollte im Backend existieren`);
 });
 
 await test('Darstellung-Toggle merkt sich die Wahl über einen Reload', async () => {

@@ -1,21 +1,28 @@
 # 3D-Druck Auftragserfassung
 
-Stand: 21. Juli 2026
+Stand: 22. Juli 2026
 
 Werkzeug zum Erfassen und Kalkulieren von 3D-Druckaufträgen, die über eBay, Etsy oder Amazon
 hereinkommen. STL/3MF laden → Material und Farbe wählen → Preis → Auftragsblatt als PDF.
 Aufträge werden lokal mit Status, Suche und Filter verwaltet; Bestellungen kommen per
 CSV-Import, raus geht es per Backup-JSON und Umsatz-CSV.
 
+Seit der zehnten Runde in zwei Seiten aufgeteilt: `index.html` ist die öffentliche, cleane
+Seite für alle, die die Domain aufrufen (Modell hochladen, Preis sehen, per Mail anfragen).
+`backend.html` ist Jans eigenes Werkzeug für Kalkulationsbasis, Auftragsdaten und die
+Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details unter
+„Öffentliche Seite vs. Backend" weiter unten.
+
 ## Dateien
 
 | Datei | Zweck |
 |---|---|
-| `index.html` | Die komplette Anwendung — Doppelklick genügt |
+| `index.html` | Öffentliche Seite: Modell, Kalkulation, Material, PDF, Mail — keine Auftragsverwaltung |
+| `backend.html` | Internes Backend: zusätzlich Kalkulationsbasis, Auftragsdaten, Aufträge (Suche/Filter/CSV-Import/Backup) |
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup + Mail-Versand), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 21 Playwright-Tests, fahren die App headless durch |
+| `tests/e2e.mjs` | 24 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -23,9 +30,12 @@ CSV-Import, raus geht es per Backup-JSON und Umsatz-CSV.
 Läuft produktiv auf dem Raspberry Pi unter `https://drucken.luetje.me`, zusätzlich zur
 lokalen Doppelklick-Nutzung. Setup:
 
-- **nginx** liefert `index.html` statisch aus `/var/www/drucken.luetje.me/index.html` aus
-  (Port 80, kein PHP/Node dahinter — reine Datei). Nicht direkt aus dem Repo-Checkout im
+- **nginx** liefert `index.html` und `backend.html` statisch aus `/var/www/drucken.luetje.me/`
+  aus (Port 80, kein PHP/Node dahinter — reine Dateien). Nicht direkt aus dem Repo-Checkout im
   Home-Verzeichnis, weil `/home/jan` `drwx------` ist und `www-data` da nicht durchkäme.
+  `backend.html` hängt an keiner nginx-Location mit eigenem Zugriffsschutz — erreichbar ist es
+  über dieselbe öffentliche Domain wie `index.html`, nur eben nicht verlinkt. Siehe „Offene
+  Punkte" zur fehlenden Zugriffskontrolle.
 - **Cloudflare Tunnel** (`cloudflared`, systemd-Dienst, `enabled`) verbindet den Pi ausgehend
   mit Cloudflare — kein eingehendes Port-Forwarding nötig. Grund: Der Hauptanschluss läuft
   über Starlink, das hinter Carrier-Grade-NAT sitzt (WAN-IP im `100.64.0.0/10`-Bereich),
@@ -34,8 +44,9 @@ lokalen Doppelklick-Nutzung. Setup:
 - **DNS:** `drucken.luetje.me` ist ein CNAME auf den Tunnel (von `cloudflared tunnel route dns`
   gesetzt), TLS/HTTPS übernimmt Cloudflare am Edge. Kein certbot/Let's-Encrypt-Zertifikat auf
   dem Pi nötig.
-- **Update nach Codeänderung:** `index.html` liegt nicht automatisch aktuell im Webroot, nach
-  `git pull` manuell nachziehen: `sudo cp index.html /var/www/drucken.luetje.me/index.html`.
+- **Update nach Codeänderung:** Weder `index.html` noch `backend.html` liegen automatisch aktuell
+  im Webroot, nach `git pull` beide manuell nachziehen:
+  `sudo cp index.html backend.html /var/www/drucken.luetje.me/`.
 - **API-Server** (`server/api-server.js`, systemd-Dienst `druckauftrag-backup`, nur
   `127.0.0.1:8181`), zwei Routen:
   - `POST /api/backup` — aktuelle Auftragsliste (`persistOrders()` ruft das bei jeder Änderung
@@ -103,26 +114,52 @@ und nutzt für Deflate das native `DecompressionStream` des Browsers — keine B
 Seite später als Artifact veröffentlicht werden soll, muss der `<head>` raus — dann lohnt ein
 Build-Skript wie bei PV und E-Auto.
 
+## Öffentliche Seite vs. Backend
+
+`index.html` und `backend.html` sind zwei separate HTML-Dokumente, die sich über denselben
+Origin (`drucken.luetje.me`) denselben `localStorage` teilen — kein Server, keine gemeinsame
+Datenbank nötig, reines Browser-Feature.
+
+- **index.html** (öffentlich): Modelldatei, Druckeinstellungen, Kalkulation, Material & Farbe,
+  „PDF exportieren", „Per Mail senden" (hervorgehoben, steht als letzter Knopf in der Kopfzeile —
+  die Hauptaktion für alle, die die Seite aufrufen). Kennt weder Kalkulationsbasis-Eingabefelder
+  noch Auftragsdaten noch die Auftragsliste. Die Kalkulationsbasis liest es nur lesend aus
+  `druckauftrag.calcbase.v1` (`CALCBASE`-Objekt im Code, mit eingebauten Startwerten, falls der
+  Key noch nie geschrieben wurde).
+- **backend.html** (intern, für Jan): identisch zu index.html, zusätzlich Kalkulationsbasis
+  (schreibt bei jeder Kalkulation nach `druckauftrag.calcbase.v1`), Auftragsdaten und Aufträge
+  (Suche, Status, Filter, CSV-Import, Backup, Umsatz-CSV) — die komplette bisherige Anwendung,
+  nur umbenannt/mit Link zurück zur öffentlichen Seite im Footer.
+- **Warum kein `#orderId`/`#buyer` mehr in index.html:** Diese Felder waren Jans eigene
+  Bestell-Verwaltung, nicht Teil dessen, was jemand von außen ausfüllen soll. Wer über
+  index.html eine Anfrage schickt, tut das komplett anonym über „Per Mail senden" — Jan trägt
+  Plattform/Bestellnummer/Käufer erst im Backend nach, wenn er die Mail bearbeitet.
+- **PDF/Mail auf index.html ohne Auftragsdaten:** Beide Funktionen laufen unverändert, zeigen
+  für Plattform/Bestellnummer/Käufer/Liefern-bis/Notizen aber leer bzw. „–", weil es dafür kein
+  Eingabefeld mehr gibt (`g()`-Helfer in beiden Handlern ist jetzt Null-sicher).
+
 ## Was drin ist
 
-- **Auftragsliste:** mehrere Aufträge nebeneinander, lokal in `localStorage`
+Ab hier gilt alles für beide Seiten, außer wo **(nur Backend)** steht.
+
+- **Auftragsliste (nur Backend):** mehrere Aufträge nebeneinander, lokal in `localStorage`
   (`druckauftrag.orders.v1`). „Sichern“ legt den aktuellen Stand ab bzw. aktualisiert den
   geladenen Auftrag, „Neu“ beginnt einen frischen. Klick auf einen Eintrag lädt ihn zurück.
   Jeder Auftrag hat einen **Status** (offen → gedruckt → versendet → bezahlt, Klick aufs
   Badge schaltet weiter), dazu **Suche** (Bestellnummer/Käufer/Plattform) und **Filter-Chips**
   pro Status. **⧉ dupliziert** einen Auftrag für Wiederholungskäufe — gleiches Modell und
   gleiche Einstellungen, Käufer/Bestellnummer/Termin leer.
-- **Speicher-Diät:** Aufträge betten die Modellgeometrie nicht mehr einzeln ein, sondern
-  referenzieren sie per Hash im deduplizierten Mesh-Speicher (`druckauftrag.meshes.v1`).
+- **Speicher-Diät (nur Backend):** Aufträge betten die Modellgeometrie nicht mehr einzeln ein,
+  sondern referenzieren sie per Hash im deduplizierten Mesh-Speicher (`druckauftrag.meshes.v1`).
   Zehn Aufträge mit demselben Modell kosten so nur einmal Quota; verwaiste Geometrien werden
   beim Löschen aufgeräumt. Alte Aufträge mit eingebetteter Geometrie laden weiterhin.
-- **Backup & Buchhaltung:** „Backup exportieren/laden“ sichert die komplette Auftragsliste
-  inklusive Geometrien als eine JSON-Datei (Import überspringt bereits vorhandene IDs) —
-  wichtig, weil `localStorage` browsergebunden ist. „Umsatz-CSV“ exportiert Datum, Plattform,
-  Bestellnummer, Käufer, Status und Bruttopreis mit Semikolon und BOM für Excel.
-- **CSV-Import:** Bestellexport von eBay, Etsy oder Amazon per Drag-and-drop oder Einfügen.
-  Erkennt Trennzeichen (`;`, Tab, `,`) und die Spalten für Bestellnummer und Käufer selbst,
-  entdoppelt und legt jede Bestellung als Auftrag an. Alles lokal, keine API, kein Server.
+- **Backup & Buchhaltung (nur Backend):** „Backup exportieren/laden“ sichert die komplette
+  Auftragsliste inklusive Geometrien als eine JSON-Datei (Import überspringt bereits vorhandene
+  IDs) — wichtig, weil `localStorage` browsergebunden ist. „Umsatz-CSV“ exportiert Datum,
+  Plattform, Bestellnummer, Käufer, Status und Bruttopreis mit Semikolon und BOM für Excel.
+- **CSV-Import (nur Backend):** Bestellexport von eBay, Etsy oder Amazon per Drag-and-drop oder
+  Einfügen. Erkennt Trennzeichen (`;`, Tab, `,`) und die Spalten für Bestellnummer und Käufer
+  selbst, entdoppelt und legt jede Bestellung als Auftrag an. Alles lokal, keine API, kein Server.
 - **Upload:** STL binär und ASCII sowie 3MF, per Drag-and-drop. Alles bleibt lokal im Browser.
   Der 3MF-Parser ist namespace-fest (auch `<m:object>`-Prefixe), rechnet das `unit`-Attribut
   nach mm um (micron bis meter) und löst die 3MF-Production-Extension auf: Bambu Studio lagert
@@ -140,8 +177,9 @@ Build-Skript wie bei PV und E-Auto.
   drehbar, zoombar, in der gewählten Filamentfarbe. Ab ~40.000 Dreiecken wird die Vorschau
   ausgedünnt (jedes n-te Dreieck), damit das Drehen flüssig bleibt — die Kalkulation rechnet
   immer mit dem vollen Mesh, und der Hinweis unter dem Canvas zeigt die Reduktion an.
-- **Bauraum:** X/Y/Z frei einstellbar (Startwert 256³). Die Größenwarnung berücksichtigt ein
-  Drehen um 90° in der Ebene (sortierte Grundfläche gegen sortierte Bett-Grundfläche, Höhe separat).
+- **Bauraum:** X/Y/Z einstellbar nur im Backend (Startwert 256³), die Größenwarnung selbst läuft
+  auf beiden Seiten (index.html liest die Werte nur aus `CALCBASE`). Berücksichtigt ein Drehen
+  um 90° in der Ebene (sortierte Grundfläche gegen sortierte Bett-Grundfläche, Höhe separat).
 - **Material & Farbe:** 90 offizielle Bambu-Lab-Farben (PLA Basic/Matte/CF/Translucent/Pure,
   PETG Basic/CF), gruppiert nach Linie mit Preis pro kg — bewusst keine eigene Farbe mehr, da
   nur gekauft und gedruckt werden kann, was Bambu tatsächlich anbietet. Die Farbwahl legt
@@ -180,27 +218,36 @@ Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, B
 
 ## Verifiziert
 
-Die früheren Ad-hoc-Prüfungen sind jetzt **21 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
-die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Abgedeckt:
+Die früheren Ad-hoc-Prüfungen sind jetzt **24 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
+die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Läuft gegen zwei parallele
+Playwright-Pages: `page` (index.html) für alles Öffentliche, `pageB` (backend.html) für
+Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
 
 - Testwürfel 20 mm → **exakt 8000 mm³** über STL- und 3MF-Pfad, inklusive Abmessungen.
 - Wasserdichtheit: intakter Würfel warnt nicht, Würfel mit fehlendem Dreieck warnt.
 - 3MF mit ausgelagerter Objektdatei (Production Extension, z. B. aus Bambu Studio) wird
   korrekt aufgelöst.
 - Slicer-Zeit `2:30` übersteuert die Schätzung („2 h 30 min · Slicer“) und lässt sich leeren.
-- Bauraum-Warnung inkl. 90°-Rotationslogik (12 × 30 passt, 12 × 20 nicht).
-- CSV-Import filtert Duplikate/Leerzeilen; Klick lädt Bestellnummer und Käufer.
-- Auftragsänderung löst einen Server-Backup-Versuch aus (`POST /api/backup`, fire-and-forget).
-- Status weiterschalten + Filter-Chips + Suche.
-- Auftrag sichern legt `meshHash` statt eingebetteter Geometrie ab, Mesh-Speicher gefüllt.
-- Duplizieren übernimmt das Modell, leert Käufer/Bestellnummer.
-- Backup-Restore übernimmt neue Aufträge und überspringt bekannte IDs.
+- Bauraum-Warnung inkl. 90°-Rotationslogik (12 × 30 passt, 12 × 20 nicht) — auf `pageB`.
+- CSV-Import filtert Duplikate/Leerzeilen; Klick lädt Bestellnummer und Käufer — auf `pageB`.
+- Auftragsänderung löst einen Server-Backup-Versuch aus (`POST /api/backup`, fire-and-forget) —
+  auf `pageB`.
+- Status weiterschalten + Filter-Chips + Suche — auf `pageB`.
+- Auftrag sichern legt `meshHash` statt eingebetteter Geometrie ab, Mesh-Speicher gefüllt —
+  auf `pageB`.
+- Duplizieren übernimmt das Modell, leert Käufer/Bestellnummer — auf `pageB`.
+- Backup-Restore übernimmt neue Aufträge und überspringt bekannte IDs — auf `pageB`.
 - Farbwahl legt das Material (und damit den Materialpreis) für die Kalkulation fest.
 - Mail-Versand: „Per Mail senden“ schickt Auftrag inkl. echtem STL- und Stand-JSON-Anhang an
-  `/api/send-mail`; ohne geladenes Modell erscheint stattdessen eine Warnung.
+  `/api/send-mail`; ohne geladenes Modell erscheint stattdessen eine Warnung. Mailtext enthält
+  bewusst kein Plattform/Bestellnummer/Käufer/Liefern-bis mehr (index.html hat diese Felder nicht).
 - Darstellung-Umschalter merkt sich die Wahl über einen Reload.
-- v1-Stand migriert, neuere Formate werden mit klarer Meldung abgelehnt.
-- Kein einziger JS-Fehler im gesamten Lauf.
+- v1-Stand migriert (einmal mit der vollen Feldliste auf `pageB`, einmal mit der kurzen
+  Feldliste auf `page`), neuere Formate werden mit klarer Meldung abgelehnt.
+- index.html: Mail-Button ist hervorgehoben und steht nach PDF, Kalkulationsbasis/Auftragsdaten/
+  Aufträge/Modal existieren nicht im DOM.
+- backend.html: Kalkulationsbasis/Auftragsdaten/Aufträge existieren weiterhin vollständig.
+- Kein einziger JS-Fehler im gesamten Lauf, auf beiden Seiten.
 
 Aus früheren Runden zusätzlich von Hand geprüft: Stromformel linear (doppelter Preis/Leistung →
 doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit der Anzeige.
@@ -226,6 +273,24 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Zehnte Runde (22. Juli 2026):
+
+1. **Öffentliche Seite und internes Backend getrennt.** `backend.html` neu angelegt (identische
+   Kopie der bisherigen `index.html`), `index.html` um Kalkulationsbasis, Auftragsdaten und
+   Aufträge (inkl. CSV-Import, Backup, Umsatz-CSV, Modal) gekürzt — Kunden sehen künftig nur
+   Modell, Kalkulation, Material, PDF und Mail. Details unter „Öffentliche Seite vs. Backend".
+2. **Kalkulationsbasis wird über `localStorage` geteilt** (`druckauftrag.calcbase.v1`):
+   backend.html schreibt bei jeder Kalkulation, index.html liest nur (mit eingebauten
+   Startwerten als Fallback) — die Preisrechnung auf der öffentlichen Seite bleibt exakt
+   gleich, nur ohne eigenes Eingabefeld für Jans Betriebskosten.
+3. **„Per Mail senden“ hervorgehoben, Platz mit „PDF exportieren“ getauscht:** Mail ist jetzt
+   der letzte, farbig hervorgehobene Knopf in der Kopfzeile (die Hauptaktion für Besucher der
+   Seite), PDF exportieren ist ein normaler Knopf wie „Stand speichern“/„Stand laden“ und steht
+   davor. Nur auf index.html geändert, backend.html blieb unverändert.
+4. **Playwright-Suite auf zwei Seiten aufgeteilt** (`page`/`pageB`, siehe „Verifiziert"), zwei
+   neue Tests ergänzt (Button-Reihenfolge/-Farbe + fehlende/vorhandene Blöcke), 24 statt 21
+   Tests insgesamt, alle grün.
 
 Neunte Runde (22. Juli 2026):
 
@@ -336,3 +401,12 @@ Zweite Runde:
    CAD-Kernel.
 3. **Drucker-Profile.** Wer mehrere Drucker hat, stellt Bauraum/Leistung/€-pro-h bisher von Hand
    um — benannte Profile wären der nächste sinnvolle Ausbau.
+4. **`backend.html` hat keinen eigenen Zugriffsschutz.** Es ist nur nicht verlinkt, aber über
+   dieselbe öffentliche Domain unter demselben Pfadschema erreichbar wie `index.html` — wer die
+   URL errät oder in den öffentlichen GitHub-Repo-Dateinamen nachschaut, kommt an Jans komplette
+   Auftragsliste (Käufernamen, Bestellnummern) und Kalkulationsbasis (Betriebskosten, Marge).
+   Ein einfacher HTTP-Basic-Auth-Block in nginx für genau diesen einen Pfad wäre der
+   naheliegendste nächste Schritt.
+5. **Kalkulationsbasis ist ein einziger geteilter Wert, nicht pro Drucker/Profil.** Hängt mit
+   Punkt 3 zusammen — sobald es benannte Drucker-Profile gibt, müsste `CALCBASE_KEY` das
+   gewählte Profil mit übertragen, nicht nur einen einzelnen Wertesatz.

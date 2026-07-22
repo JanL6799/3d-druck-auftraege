@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D-Druck Auftragserfassung</title>
+<title>3D-Druck Auftragserfassung — Backend</title>
 <script>
 // Vor dem ersten Rendern gesetzt, damit die gespeicherte Theme-Wahl ohne Aufblitzen greift.
 (function(){
@@ -97,6 +97,9 @@
   button.primary:hover{filter:brightness(1.1)}
   button.sm{font-size:13px;padding:6px 13px}
   button.link{border:none;background:none;color:var(--accent);padding:4px 0;font-size:14px}
+  button.chev{border:none;background:none;color:var(--accent);font-size:18px;line-height:1;
+              padding:4px 8px;cursor:pointer;transition:transform .15s}
+  button.chev.open{transform:rotate(90deg)}
   button.link:hover{background:none;text-decoration:underline}
   .stack{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
 
@@ -149,6 +152,10 @@
   .palhead .name{font-size:13px;font-weight:600}
   .palhead .price{font-size:12px;color:var(--muted)}
 
+  .del{border:none;background:none;color:var(--muted);font-size:19px;line-height:1;padding:2px 6px;
+       border-radius:7px;cursor:pointer}
+  .del:hover{background:var(--warn-bg);color:#d70015}
+
   /* Kalkulation */
   table.calc{width:100%;border-collapse:collapse;font-size:15px}
   table.calc td{padding:8px 0;border-bottom:1px solid var(--line-soft)}
@@ -163,6 +170,46 @@
            white-space:pre-line}
   .warnbox.show{display:block}
   .foot{font-size:12px;color:var(--muted);text-align:center;padding:0 0 40px}
+
+  /* Auftragsliste */
+  .olist{display:flex;flex-direction:column;gap:8px}
+  .oitem{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line-soft);
+         border-radius:12px;background:var(--panel2);cursor:pointer;transition:.15s}
+  .oitem:hover{border-color:var(--accent)}
+  .oitem.active{background:var(--accent-soft);border-color:var(--accent)}
+  .oitem .oi-main{flex:1;min-width:0}
+  .oitem .oi-t{font-size:15px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .oitem .oi-s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .oitem .oi-p{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .oempty{font-size:14px;color:var(--muted);text-align:center;padding:18px 4px;line-height:1.5}
+  .obar input{padding:8px 12px;font-size:14px;margin-bottom:10px}
+  .fchips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+  .fchip{font-size:12px;font-weight:500;padding:5px 11px;border-radius:100px;border:1px solid var(--line);
+         background:var(--panel);cursor:pointer;color:var(--muted)}
+  .fchip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .stbadge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:100px;border:none;cursor:pointer;
+           white-space:nowrap;letter-spacing:.01em;flex:none}
+  .st-offen{background:rgba(142,142,147,.18);color:#8e8e93}
+  .st-gedruckt{background:rgba(10,132,255,.16);color:#0a84ff}
+  .st-versendet{background:rgba(255,159,10,.18);color:#c97b06}
+  .st-bezahlt{background:rgba(48,209,88,.18);color:#28a04c}
+
+  /* Modal */
+  .modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.4);
+        backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+        display:none;align-items:flex-start;justify-content:center;padding:40px 18px;overflow:auto}
+  .modal-backdrop.show{display:flex}
+  .modal{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
+        width:100%;max-width:560px;padding:24px 26px;margin:auto}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .modal-head h3{font-size:21px;font-weight:600;letter-spacing:-.02em;margin:0}
+  .mini-drop{border:1.5px dashed var(--line);border-radius:12px;padding:22px;text-align:center;
+        cursor:pointer;font-size:14px;color:var(--muted);background:var(--panel2);transition:.15s;margin:6px 0 16px}
+  .mini-drop:hover,.mini-drop.over{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+  .improw{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:center;padding:7px 2px;
+        border-bottom:1px solid var(--line-soft);font-size:14px}
+  .improw:last-child{border-bottom:none}
+  .improw .muted{color:var(--muted)}
 
   /* Druckansicht */
   #print{display:none}
@@ -187,15 +234,15 @@
 <body>
 
 <header>
-  <h1>3D-Druck Auftragserfassung</h1>
+  <h1>3D-Druck Auftragserfassung — Backend</h1>
   <span class="chip" id="stateBadge">Kein Modell</span>
   <span class="sp"></span>
   <div class="stack">
     <button id="btnTheme" class="sm" aria-label="Darstellung umschalten" title="Darstellung umschalten">🌙</button>
     <button id="btnSave" class="sm"><span class="wide">Stand speichern</span><span class="narrow">Speichern</span></button>
     <button id="btnLoad" class="sm"><span class="wide">Stand laden</span><span class="narrow">Laden</span></button>
-    <button id="btnPdf" class="sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
-    <button id="btnMail" class="primary sm"><span class="wide">Per Mail senden</span><span class="narrow">Mail</span></button>
+    <button id="btnMail" class="sm"><span class="wide">Per Mail senden</span><span class="narrow">Mail</span></button>
+    <button id="btnPdf" class="primary sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
   </div>
 </header>
 
@@ -296,9 +343,111 @@
       <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
     </div>
 
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <h3 style="margin:0">Kalkulationsbasis</h3>
+          <p class="sub" style="margin:2px 0 0">Deine Betriebskosten.</p>
+        </div>
+        <button class="chev" id="btnCalcBase" aria-label="Kalkulationsbasis ein-/ausklappen" aria-expanded="false">▸</button>
+      </div>
+      <div id="calcBaseBody" style="display:none">
+        <div class="row">
+          <div><label for="pWatt">Drucker-Leistung W</label><input id="pWatt" type="number" step="5" min="0" value="120"></div>
+          <div><label for="pKwh">Strompreis €/kWh</label><input id="pKwh" type="number" step="0.01" min="0" value="0.27"></div>
+        </div>
+        <div class="row">
+          <div><label for="pMachine">Maschine €/h</label><input id="pMachine" type="number" step="0.5" min="0" value="1"></div>
+          <div><label for="pSetup">Rüsten €</label><input id="pSetup" type="number" step="0.5" min="0" value="1.5"></div>
+        </div>
+        <div class="row">
+          <div><label for="pMargin">Marge %</label><input id="pMargin" type="number" step="5" value="15"></div>
+          <div><label for="pVat">MwSt. %</label><input id="pVat" type="number" step="1" min="0" value="0"></div>
+        </div>
+        <label style="margin-bottom:6px">Bauraum deines Druckers (mm)</label>
+        <div class="row3">
+          <div><input id="bx" type="number" min="10" step="1" value="256" aria-label="Bauraum X"></div>
+          <div><input id="by" type="number" min="10" step="1" value="256" aria-label="Bauraum Y"></div>
+          <div><input id="bz" type="number" min="10" step="1" value="256" aria-label="Bauraum Z"></div>
+        </div>
+        <p class="hint" style="text-align:left">
+          Strom wird getrennt gerechnet: Leistung × Druckzeit × Preis. In „Maschine €/h“ gehören
+          Abschreibung, Düsen und Wartung — ohne Strom, sonst zählst du ihn doppelt. Der Bauraum
+          steuert die Größenwarnung; ein Drehen um 90° in der Ebene wird dabei berücksichtigt.
+        </p>
+      </div>
+    </div>
   </div>
 </div>
-<div class="foot"><a href="impressum.html" style="color:inherit">Impressum</a></div>
+
+<div class="wrap" style="grid-template-columns:1fr;padding-top:0">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <h3 style="margin:0">Auftragsdaten</h3>
+        <p class="sub" style="margin:2px 0 0">Woher die Bestellung kommt und für wen sie ist.</p>
+      </div>
+      <button class="chev" id="btnOrderData" aria-label="Auftragsdaten ein-/ausklappen" aria-expanded="false">▸</button>
+    </div>
+    <div id="orderDataBody" style="display:none;margin-top:18px">
+      <div class="row">
+        <div>
+          <label for="platform">Plattform</label>
+          <select id="platform">
+            <option>eBay</option><option>Etsy</option><option>Amazon</option>
+            <option>Direktanfrage</option><option>Sonstige</option>
+          </select>
+        </div>
+        <div><label for="orderId">Bestellnummer</label><input id="orderId" placeholder="z. B. 14-13454-98123"></div>
+      </div>
+      <div class="row">
+        <div><label for="buyer">Käufer</label><input id="buyer" placeholder="Name / Nutzername"></div>
+        <div><label for="due">Liefern bis</label><input id="due" type="date"></div>
+      </div>
+      <label for="notes">Notizen</label>
+      <textarea id="notes" placeholder="Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <h3 style="margin:0">Aufträge</h3>
+        <p class="sub" style="margin:2px 0 0">Alle Aufträge liegen lokal in diesem Browser.</p>
+      </div>
+      <div class="stack">
+        <button class="sm" id="btnImport">CSV importieren</button>
+        <button class="sm" id="btnOrderNew">Neu</button>
+        <button class="primary sm" id="btnOrderSave">Sichern</button>
+        <button class="chev" id="btnOrders" aria-label="Aufträge ein-/ausklappen" aria-expanded="false">▸</button>
+      </div>
+    </div>
+    <div id="ordersBody" style="display:none;margin-top:18px">
+      <div class="obar">
+        <input id="oSearch" placeholder="Suchen: Bestellnummer, Käufer, Plattform …">
+      </div>
+      <div class="fchips" id="oChips"></div>
+      <div id="orderList"></div>
+      <div class="stack" style="margin-top:14px">
+        <button class="sm" id="btnBackup">Backup exportieren</button>
+        <button class="sm" id="btnRestore">Backup laden</button>
+        <button class="sm" id="btnCsvOut">Umsatz-CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="foot"><a href="index.html" style="color:inherit">Öffentliche Seite</a> · <a href="impressum.html" style="color:inherit">Impressum</a></div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle"></h3>
+      <button class="del" id="modalClose" style="font-size:24px" title="Schließen">&times;</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
 
 <div id="print"></div>
 
@@ -353,21 +502,19 @@ const PALETTE = PALETTE_LINES.flatMap(g =>
 
 const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
-// Die Kalkulationsbasis (Strompreis, Maschine €/h, Marge, Bauraum …) wird nur im Backend
-// (backend.html) eingestellt und dort in diesen Key geschrieben — diese öffentliche Seite hat
-// dafür kein eigenes Eingabefeld, sondern liest ihn nur (siehe CALCBASE weiter unten).
+const ORDERS_KEY = "druckauftrag.orders.v1";
+const MESHES_KEY = "druckauftrag.meshes.v1";
+// Teilt die Kalkulationsbasis mit index.html (öffentliche Kundenseite ohne eigenes
+// Eingabefeld dafür) über denselben Origin. index.html liest nur, hier wird geschrieben.
 const CALCBASE_KEY = "druckauftrag.calcbase.v1";
-// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js) für den Mailversand.
-// X-Backup-Secret ist kein echtes Geheimnis — steht im öffentlichen Quelltext dieser Seite —
-// sondern nur eine Hürde gegen zufälliges Abgreifen durch Bots.
+const ORDER_STATUS = ["offen","gedruckt","versendet","bezahlt"];
+// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js): Auftragsliste sichern
+// und Auftrags-Mail mit echtem Anhang verschicken. X-Backup-Secret ist kein echtes Geheimnis
+// — steht im öffentlichen Quelltext dieser Seite — sondern nur eine Hürde gegen zufälliges
+// Abgreifen durch Bots.
+const BACKUP_URL = "/api/backup";
 const MAIL_API_URL = "/api/send-mail";
 const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
-
-// Feste Startwerte, falls das Backend noch nie gespeichert hat (frischer Browser/Origin).
-// Danach übernimmt CALCBASE_KEY, den backend.html bei jeder Kalkulation aktuell hält.
-const CALCBASE_DEFAULTS = {pWatt:120,pKwh:0.27,pMachine:1,pSetup:1.5,pMargin:15,pVat:0,bx:256,by:256,bz:256};
-let CALCBASE = {...CALCBASE_DEFAULTS};
-try { Object.assign(CALCBASE, JSON.parse(localStorage.getItem(CALCBASE_KEY)) || {}); } catch(e){}
 
 /* ---------- Zustand ---------- */
 let mesh = null;
@@ -668,20 +815,29 @@ function calc(){
   const hours   = slicerH ?? est;
 
   const cMat  = grams/1000 * (+mat.price||0);
-  const cElec = CALCBASE.pWatt/1000 * hours * CALCBASE.pKwh;
-  const cMach = hours * CALCBASE.pMachine;
-  const cSet  = CALCBASE.pSetup;
-  const net1  = (cMat + cElec + cMach) * (1 + CALCBASE.pMargin/100) + cSet;
+  const cElec = (+$("pWatt").value||0)/1000 * hours * (+$("pKwh").value||0);
+  const cMach = hours * (+$("pMachine").value||0);
+  const cSet  = +$("pSetup").value||0;
+  const net1  = (cMat + cElec + cMach) * (1 + (+$("pMargin").value||0)/100) + cSet;
 
   const netQty  = net1 * qty;
-  const vat     = CALCBASE.pVat;
+  const vat     = +$("pVat").value||0;
   const gross   = netQty * (1 + vat/100);
 
   return {vol,grams,hours,size,cMat:cMat*qty,cElec:cElec*qty,cMach:cMach*qty,cSet:cSet*qty,
           gross,qty,vat,mat,infill,layer,walls,slicer:slicerH!==null};
 }
 
+// Schreibt die aktuelle Kalkulationsbasis nach jedem render() in den geteilten Storage-Key,
+// damit die öffentliche index.html (ohne eigenes Eingabefeld dafür) sie live mitbekommt.
+function saveCalcBase(){
+  const d = {};
+  ["pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz"].forEach(id => d[id] = +$(id).value || 0);
+  try { localStorage.setItem(CALCBASE_KEY, JSON.stringify(d)); } catch(e){ /* Privatmodus o. Ä. */ }
+}
+
 function render(){
+  saveCalcBase();
   const r = calc();
   const set = (id,v) => $(id).textContent = v;
   const ids = ["rVol","rMass","rTime","rDim","rMat","rElec","rMach","rSetup","rTotal"];
@@ -694,7 +850,7 @@ function render(){
   set("rTime", (h?h+" h ":"")+m+" min"+per+(r.slicer?" · Slicer":""));
   set("rDim",  r.size.map(v=>num(v,0)).join(" × ")+" mm");
   set("rMat",  eur(r.cMat));
-  set("lElec", "Strom ("+num(CALCBASE.pWatt,0)+" W · "+num(CALCBASE.pKwh,2)+" €/kWh)");
+  set("lElec", "Strom ("+num((+$("pWatt").value||0),0)+" W · "+num(+$("pKwh").value||0,2)+" €/kWh)");
   set("rElec", eur(r.cElec));
   set("rMach", eur(r.cMach));
   set("rSetup",eur(r.cSet));
@@ -704,7 +860,7 @@ function render(){
 
   // Bauraum frei konfigurierbar; ein Drehen um 90° in der XY-Ebene darf das Teil passend machen,
   // deshalb Grundfläche sortiert gegen die sortierte Bett-Grundfläche prüfen, Höhe separat.
-  const bed = [ CALCBASE.bx||1e9, CALCBASE.by||1e9, CALCBASE.bz||1e9 ];
+  const bed = [ +$("bx").value||1e9, +$("by").value||1e9, +$("bz").value||1e9 ];
   const foot = [r.size[0], r.size[1]].sort((a,b) => a-b);
   const bedFoot = [bed[0], bed[1]].sort((a,b) => a-b);
   const over = foot[0] > bedFoot[0] || foot[1] > bedFoot[1] || r.size[2] > bed[2];
@@ -877,6 +1033,25 @@ function clearMesh(){
 }
 $("btnClear").onclick = clearMesh;
 
+$("btnCalcBase").onclick = () => {
+  const open = $("calcBaseBody").style.display === "block";
+  $("calcBaseBody").style.display = open ? "none" : "block";
+  $("btnCalcBase").classList.toggle("open", !open);
+  $("btnCalcBase").setAttribute("aria-expanded", String(!open));
+};
+$("btnOrderData").onclick = () => {
+  const open = $("orderDataBody").style.display === "block";
+  $("orderDataBody").style.display = open ? "none" : "block";
+  $("btnOrderData").classList.toggle("open", !open);
+  $("btnOrderData").setAttribute("aria-expanded", String(!open));
+};
+$("btnOrders").onclick = () => {
+  const open = $("ordersBody").style.display === "block";
+  $("ordersBody").style.display = open ? "none" : "block";
+  $("btnOrders").classList.toggle("open", !open);
+  $("btnOrders").setAttribute("aria-expanded", String(!open));
+};
+
 /* ---------- Farbe ---------- */
 function drawSwatches(){
   $("paletteGroups").innerHTML = PALETTE_LINES.map(g => `
@@ -900,20 +1075,32 @@ function drawSwatches(){
 /* ---------- Eingaben ---------- */
 $("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
 $("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
-["walls","qty","scale","slicerTime"].forEach(id => $(id).addEventListener("input", render));
+["walls","qty","scale","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz",
+ "slicerTime"].forEach(id => $(id).addEventListener("input", render));
 
 /* ---------- Speichern / Laden ---------- */
-// Kalkulationsbasis (pWatt…bz) und Auftragsdaten (platform…notes) gehören nur noch zum
-// Backend (backend.html) — hier gibt es keine Eingabefelder mehr dafür, also auch nichts,
-// was "Stand speichern/laden" für diese Felder sichern könnte.
-const FIELDS = ["infill","layer","walls","qty","scale","slicerTime"];
+const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","walls","qty","scale",
+                "pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
 
-function snapshot(){
+function snapshot(embedMesh = true){
   const d = { v:2, saved:new Date().toISOString(), color, fields:{} };
   FIELDS.forEach(f => d.fields[f] = $(f).value);
   if (mesh){
-    d.mesh = { name:mesh.name, bytes:mesh.bytes,       // Datei-Export: bewusst in sich vollständig
-               tris:Array.from(mesh.tris).map(v=>Math.round(v*1e4)/1e4) };
+    const packed = () => ({ name:mesh.name, bytes:mesh.bytes,
+                            tris:Array.from(mesh.tris).map(v=>Math.round(v*1e4)/1e4) });
+    if (embedMesh){
+      d.mesh = packed();                         // Datei-Export: bewusst in sich vollständig
+    } else {
+      // Auftragsliste: Geometrie dedupliziert im Mesh-Speicher, Auftrag hält nur den Hash.
+      // Zehn Aufträge mit demselben Modell kosten so nur einmal Platz im Quota.
+      const hash = meshHash();
+      const store = loadMeshStore();
+      if (!store[hash]){
+        store[hash] = packed();
+        if (!saveMeshStore(store)){ d.mesh = packed(); return d; }   // Quota: notfalls einbetten
+      }
+      d.meshHash = hash;
+    }
   }
   return d;
 }
@@ -924,7 +1111,7 @@ $("btnSave").onclick = () => {
   const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([json],{type:"application/json"}));
-  a.download = "auftrag-"+stamp+".json";
+  a.download = "auftrag-"+($("orderId").value.trim() || stamp)+".json";
   a.click(); URL.revokeObjectURL(a.href);
   flash($("btnSave"), "Gespeichert ✓");
 };
@@ -958,9 +1145,11 @@ function applyState(d){
   FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
   if (d.color && d.color.c) color = d.color;
 
-  if (d.mesh && d.mesh.tris){
-    const tris = new Float32Array(d.mesh.tris);
-    mesh = Object.assign({tris, name:d.mesh.name, bytes:d.mesh.bytes}, analyse(tris));
+  let mdata = d.mesh;
+  if (!mdata && d.meshHash) mdata = loadMeshStore()[d.meshHash] || null;
+  if (mdata && mdata.tris){
+    const tris = new Float32Array(mdata.tris);
+    mesh = Object.assign({tris, name:mdata.name, bytes:mdata.bytes}, analyse(tris));
     buildView();
     $("drop").style.display="none"; $("viewerBox").style.display="block";
     $("stateBadge").textContent = mesh.name+" · "+mesh.tricount.toLocaleString("de-DE")+" Dreiecke";
@@ -981,7 +1170,7 @@ $("btnPdf").onclick = () => {
            w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
            return; }
   const shot = view ? cv.toDataURL("image/png") : "";
-  const g = id => { const el = $(id); return el ? el.value.trim() : ""; };
+  const g = id => $(id).value.trim();
   const row = (a,b) => `<tr><td>${a}</td><td>${b}</td></tr>`;
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
   const dt = new Date().toLocaleString("de-DE",{dateStyle:"long",timeStyle:"short"});
@@ -1019,7 +1208,7 @@ $("btnPdf").onclick = () => {
         <h4>Kalkulation</h4>
         <table>
           ${row("Material", eur(r.cMat))}
-          ${row("Strom ("+num(CALCBASE.pWatt,0)+" W · "+num(CALCBASE.pKwh,2)+" €/kWh)", eur(r.cElec))}
+          ${row("Strom ("+num(+g("pWatt")||0,0)+" W · "+num(+g("pKwh")||0,2)+" €/kWh)", eur(r.cElec))}
           ${row("Maschinenzeit", eur(r.cMach))}
           ${row("Rüsten &amp; Nacharbeit", eur(r.cSet))}
           ${row("MwSt. "+num(r.vat,0)+" %", eur(r.gross - r.gross/(1+r.vat/100)))}
@@ -1081,7 +1270,7 @@ $("btnMail").onclick = async () => {
   if (!r){ const w=$("warn"); w.className="warnbox show";
            w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
            return; }
-  const g = id => { const el = $(id); return el ? el.value.trim() : ""; };
+  const g = id => $(id).value.trim();
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
 
   const stlName = mesh.name.replace(/\.(stl|3mf)$/i,"") + ".stl";
@@ -1133,8 +1322,374 @@ $("btnMail").onclick = async () => {
   }
 };
 
+/* ---------- Auftragsliste ---------- */
+let orders = [];
+let currentOrderId = null;
+let orderFilter = "alle", orderQuery = "";
+
+function loadOrders(){
+  try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY)) || []; } catch(e){ orders = []; }
+  if (!Array.isArray(orders)) orders = [];
+}
+function persistOrders(){
+  try { localStorage.setItem(ORDERS_KEY, JSON.stringify(orders)); backupOrders(); return true; }
+  catch(e){ return false; }
+}
+// Fire-and-forget: läuft nur mit, wenn der Backup-Server auf dem Pi erreichbar ist
+// (z.B. beim lokalen Doppelklick-Öffnen von index.html nicht — dann schlägt fetch() einfach
+// lautlos fehl, ohne die App zu beeinträchtigen).
+function backupOrders(){
+  try {
+    fetch(BACKUP_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
+      body: JSON.stringify({ saved:new Date().toISOString(), orders })
+    }).catch(()=>{});
+  } catch(e){}
+}
+function newId(){
+  return (crypto.randomUUID ? crypto.randomUUID() : "o"+Date.now()+Math.random().toString(16).slice(2));
+}
+function orderTitle(o){
+  return (o.orderId||"").trim() || (o.buyer||"").trim() || "Auftrag ohne Nummer";
+}
+
+/* Geometrie-Speicher: Modelle liegen dedupliziert unter ihrem Hash, Aufträge referenzieren nur */
+function loadMeshStore(){
+  try { return JSON.parse(localStorage.getItem(MESHES_KEY)) || {}; } catch(e){ return {}; }
+}
+function saveMeshStore(s){
+  try { localStorage.setItem(MESHES_KEY, JSON.stringify(s)); return true; } catch(e){ return false; }
+}
+function meshHash(){                                   // FNV-1a über die Geometrie-Bytes
+  const u8 = new Uint8Array(mesh.tris.buffer, mesh.tris.byteOffset, mesh.tris.byteLength);
+  let h = 0x811c9dc5;
+  for (let i=0;i<u8.length;i++){ h ^= u8[i]; h = Math.imul(h, 0x01000193) >>> 0; }
+  return ("0000000"+h.toString(16)).slice(-8)+"-"+mesh.tris.length;
+}
+function gcMeshes(){                                   // verwaiste Geometrien aufräumen
+  const used = new Set(orders.map(o => o.snapshot && o.snapshot.meshHash).filter(Boolean));
+  const store = loadMeshStore();
+  let dirty = false;
+  for (const k of Object.keys(store)) if (!used.has(k)){ delete store[k]; dirty = true; }
+  if (dirty) saveMeshStore(store);
+}
+
+function drawChips(){
+  const counts = { alle: orders.length };
+  ORDER_STATUS.forEach(s => counts[s] = orders.filter(o => (o.status||"offen") === s).length);
+  $("oChips").innerHTML = ["alle", ...ORDER_STATUS].map(s =>
+    `<button class="fchip${orderFilter===s?" on":""}" data-f="${s}">${s==="alle"?"Alle":s}${counts[s]?" · "+counts[s]:""}</button>`
+  ).join("");
+  $("oChips").querySelectorAll(".fchip").forEach(b => b.onclick = () => {
+    orderFilter = b.dataset.f; drawOrders();
+  });
+}
+
+function drawOrders(){
+  drawChips();
+  const box = $("orderList");
+  if (!orders.length){
+    box.innerHTML = `<div class="oempty">Noch keine Aufträge gesichert.<br>„Sichern“ legt den aktuellen Stand ab, „CSV importieren“ holt Bestellungen aus eBay, Etsy oder Amazon.</div>`;
+    return;
+  }
+  const q = orderQuery.trim().toLowerCase();
+  const match = o => (orderFilter === "alle" || (o.status||"offen") === orderFilter)
+    && (!q || [o.orderId, o.buyer, o.platform].some(v => (v||"").toLowerCase().includes(q)));
+  const sorted = orders.filter(match).sort((a,b) => (b.saved||"").localeCompare(a.saved||""));
+  if (!sorted.length){
+    box.innerHTML = `<div class="oempty">Kein Auftrag passt zu Filter oder Suche.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="olist">` + sorted.map(o => {
+    const d = o.saved ? new Date(o.saved).toLocaleDateString("de-DE") : "";
+    const sub = [o.platform, (o.buyer||"").trim(), d].filter(Boolean).join(" · ");
+    const st = o.status || "offen";
+    return `<div class="oitem${o.id===currentOrderId?" active":""}" data-id="${esc(o.id)}">
+      <div class="oi-main">
+        <div class="oi-t">${esc(orderTitle(o))}</div>
+        <div class="oi-s">${esc(sub) || "—"}</div>
+      </div>
+      <button class="stbadge st-${st}" data-st="${esc(o.id)}" title="Status weiterschalten">${st}</button>
+      <div class="oi-p">${o.priceText ? esc(o.priceText) : ""}</div>
+      <button class="del" data-dup="${esc(o.id)}" title="Duplizieren" style="font-size:15px">⧉</button>
+      <button class="del" data-del="${esc(o.id)}" title="Löschen">&times;</button>
+    </div>`;
+  }).join("") + `</div>`;
+
+  box.querySelectorAll(".oitem").forEach(el => el.onclick = e => {
+    if (e.target.closest("[data-del],[data-st],[data-dup]")) return;
+    loadOrder(el.dataset.id);
+  });
+  box.querySelectorAll("[data-st]").forEach(b => b.onclick = () => {
+    const o = orders.find(x => x.id === b.dataset.st); if (!o) return;
+    o.status = ORDER_STATUS[(ORDER_STATUS.indexOf(o.status||"offen")+1) % ORDER_STATUS.length];
+    persistOrders(); drawOrders();
+  });
+  box.querySelectorAll("[data-dup]").forEach(b => b.onclick = () => duplicateOrder(b.dataset.dup));
+  box.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    orders = orders.filter(o => o.id !== b.dataset.del);
+    if (currentOrderId === b.dataset.del) currentOrderId = null;
+    persistOrders(); gcMeshes(); drawOrders();
+  });
+}
+
+function loadOrder(id){
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const snap = o.snapshot;
+  const hasMesh = snap && (snap.mesh || (snap.meshHash && loadMeshStore()[snap.meshHash]));
+  if (!hasMesh) clearMesh();
+  applyState(snap || {v:2, fields:{platform:o.platform, orderId:o.orderId, buyer:o.buyer}});
+  currentOrderId = id;
+  drawOrders();
+}
+
+// Wiederholungskauf: gleiches Modell, gleiche Einstellungen — neuer Käufer, neue Bestellnummer
+function duplicateOrder(id){
+  const src = orders.find(o => o.id === id); if (!src) return;
+  const snap = JSON.parse(JSON.stringify(src.snapshot || {v:2, fields:{}}));
+  snap.fields = snap.fields || {};
+  snap.fields.orderId = ""; snap.fields.buyer = ""; snap.fields.due = "";
+  orders.push({ id:newId(), saved:new Date().toISOString(), platform:src.platform,
+                orderId:"", buyer:"", priceText:src.priceText||"", status:"offen", snapshot:snap });
+  persistOrders();
+  loadOrder(orders[orders.length-1].id);
+}
+
+$("btnOrderSave").onclick = () => {
+  const r = calc();
+  const prev = orders.find(o => o.id === currentOrderId);
+  const rec = {
+    id: currentOrderId || newId(),
+    saved: new Date().toISOString(),
+    platform: $("platform").value,
+    orderId: $("orderId").value.trim(),
+    buyer: $("buyer").value.trim(),
+    priceText: r ? eur(r.gross) : "",
+    status: prev ? (prev.status || "offen") : "offen",
+    snapshot: snapshot(false)
+  };
+  const i = orders.findIndex(o => o.id === rec.id);
+  if (i >= 0) orders[i] = rec; else orders.push(rec);
+  currentOrderId = rec.id;
+  const ok = persistOrders();
+  gcMeshes(); drawOrders();
+  flash($("btnOrderSave"), ok ? "Gesichert ✓" : "Zu groß fürs Archiv");
+};
+$("btnOrderNew").onclick = () => {
+  currentOrderId = null;
+  ["orderId","buyer","notes"].forEach(f => $(f).value = "");
+  $("due").value = "";
+  drawOrders();
+  flash($("btnOrderNew"), "Neu ✓");
+};
+$("oSearch").oninput = e => { orderQuery = e.target.value; drawOrders(); };
+
+/* ---------- Backup & Umsatz-CSV ---------- */
+function applyBackup(d){
+  if (!d || d.type !== "druckauftrag-backup" || !Array.isArray(d.orders))
+    throw new Error("Das ist kein Auftrags-Backup.");
+  const have = new Set(orders.map(o => o.id));
+  let added = 0;
+  d.orders.forEach(o => { if (o && o.id && !have.has(o.id)){ orders.push(o); added++; } });
+  if (d.meshes){
+    const store = loadMeshStore();
+    Object.entries(d.meshes).forEach(([k,v]) => { if (!store[k]) store[k] = v; });
+    saveMeshStore(store);
+  }
+  persistOrders(); gcMeshes(); drawOrders();
+  return added;
+}
+
+$("btnBackup").onclick = () => {
+  const used = new Set(orders.map(o => o.snapshot && o.snapshot.meshHash).filter(Boolean));
+  const store = loadMeshStore(), meshes = {};
+  used.forEach(h => { if (store[h]) meshes[h] = store[h]; });
+  const data = { v:1, type:"druckauftrag-backup", exported:new Date().toISOString(), orders, meshes };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)],{type:"application/json"}));
+  a.download = "druckauftraege-backup-"+new Date().toISOString().slice(0,10)+".json";
+  a.click(); URL.revokeObjectURL(a.href);
+  flash($("btnBackup"), "Exportiert ✓");
+};
+$("btnRestore").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type="file"; inp.accept=".json";
+  inp.onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { const added = applyBackup(JSON.parse(await f.text()));
+          flash($("btnRestore"), added+" übernommen ✓"); }
+    catch(err){ const w=$("warn"); w.className="warnbox show";
+                w.textContent = "Backup konnte nicht geladen werden: "+err.message; }
+  };
+  inp.click();
+};
+$("btnCsvOut").onclick = () => {
+  if (!orders.length){ flash($("btnCsvOut"), "Keine Aufträge"); return; }
+  const price = t => (t||"").replace(/[^\d,]/g,"");        // "1.234,56 €" -> "1234,56"
+  const rows = [["Datum","Plattform","Bestellnummer","Käufer","Status","Preis brutto (EUR)"]]
+    .concat(orders.slice().sort((a,b) => (a.saved||"").localeCompare(b.saved||"")).map(o => [
+      o.saved ? new Date(o.saved).toLocaleDateString("de-DE") : "",
+      o.platform||"", o.orderId||"", o.buyer||"", o.status||"offen", price(o.priceText)
+    ]));
+  const csvEsc = v => /[;"\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+  const txt = "\uFEFF"+rows.map(r => r.map(csvEsc).join(";")).join("\r\n");   // BOM für Excel
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([txt],{type:"text/csv"}));
+  a.download = "umsatz-"+new Date().toISOString().slice(0,10)+".csv";
+  a.click(); URL.revokeObjectURL(a.href);
+  flash($("btnCsvOut"), "Exportiert ✓");
+};
+
+/* ---------- CSV-Import (eBay / Etsy / Amazon, alles lokal) ---------- */
+function parseCSV(text){
+  text = text.replace(/^﻿/, "");
+  const nl = text.indexOf("\n");
+  const first = nl >= 0 ? text.slice(0, nl) : text;
+  const delim = [";","\t",","].map(d => [d, first.split(d).length]).sort((a,b) => b[1]-a[1])[0][0];
+  const rows = []; let row = [], field = "", inQ = false;
+  for (let i=0;i<text.length;i++){
+    const ch = text[i];
+    if (inQ){
+      if (ch === '"'){ if (text[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
+      else field += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === delim){ row.push(field); field = ""; }
+      else if (ch === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (ch !== "\r") field += ch;
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function extractOrders(rows){
+  const ORDER = ["order number","order id","order-id","bestellnummer","transaction id","order no",
+                 "sales record number","verkaufsvorgangsnummer"];
+  const BUYER = ["buyer name","buyer username","full name","buyer","recipient name","ship to name",
+                 "buyer-name","recipient","käufer","name des käufers","versandname"];
+  const norm = s => s.trim().toLowerCase();
+  const findCol = (head, keys) => {
+    let i = head.findIndex(c => keys.includes(c));
+    if (i < 0) i = head.findIndex(c => keys.some(k => c.includes(k)));
+    return i;
+  };
+  for (let h=0; h<Math.min(rows.length,20); h++){
+    const head = rows[h].map(norm);
+    const oi = findCol(head, ORDER), bi = findCol(head, BUYER);
+    if (oi < 0 && bi < 0) continue;
+    const seen = new Set(), found = [];
+    for (let r=h+1; r<rows.length; r++){
+      const cells = rows[r];
+      if (!cells || cells.every(c => !c.trim())) continue;
+      const orderId = oi >= 0 ? (cells[oi]||"").trim() : "";
+      const buyer   = bi >= 0 ? (cells[bi]||"").trim() : "";
+      if (!orderId && !buyer) continue;
+      const key = orderId || buyer;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({orderId, buyer});
+    }
+    if (found.length) return found;
+  }
+  return [];
+}
+
+let importRows = [];
+function openImport(){
+  modalShow("Bestellungen importieren", `
+    <p class="sub" style="margin-bottom:4px">Bestellungen bei eBay, Etsy oder Amazon als CSV exportieren und hier ablegen. Die Datei bleibt lokal, nichts wird hochgeladen.</p>
+    <div class="mini-drop" id="impDrop">CSV-Datei ablegen oder auswählen</div>
+    <input type="file" id="impFile" accept=".csv,.tsv,.txt" hidden>
+    <label for="impText">oder Inhalt einfügen</label>
+    <textarea id="impText" placeholder="Bestellnummer;Käufer&#10;14-13454-98123;maxmuster"></textarea>
+    <div class="row" style="margin-top:14px;align-items:end">
+      <div>
+        <label for="impPlat">Plattform für diese Bestellungen</label>
+        <select id="impPlat">
+          <option>eBay</option><option>Etsy</option><option>Amazon</option>
+          <option>Direktanfrage</option><option>Sonstige</option>
+        </select>
+      </div>
+      <div style="text-align:right"><button class="primary" id="impParse">Vorschau</button></div>
+    </div>
+    <div id="impResult" style="margin-top:16px"></div>
+  `);
+
+  const readText = txt => {
+    importRows = extractOrders(parseCSV(txt));
+    const res = $("impResult");
+    if (!importRows.length){
+      res.innerHTML = `<div class="oempty">Keine Bestellnummern oder Käufer erkannt. Enthält der Export eine Kopfzeile mit „Order number“ / „Bestellnummer“ oder „Buyer“ / „Käufer“?</div>`;
+      return;
+    }
+    res.innerHTML =
+      `<label>${importRows.length} Bestellung${importRows.length>1?"en":""} erkannt</label>` +
+      importRows.slice(0,8).map(o =>
+        `<div class="improw">
+           <div>${esc(o.orderId) || "<span class='muted'>ohne Nummer</span>"}</div>
+           <div>${esc(o.buyer) || "<span class='muted'>—</span>"}</div>
+           <div class="muted">↴</div>
+         </div>`).join("") +
+      (importRows.length>8 ? `<div class="improw"><div class="muted" style="grid-column:1/-1">… und ${importRows.length-8} weitere</div></div>` : "") +
+      `<div style="text-align:right;margin-top:16px">
+         <button class="primary" id="impDo">${importRows.length} übernehmen</button></div>`;
+    $("impDo").onclick = () => {
+      const plat = $("impPlat").value;
+      const existing = new Set(orders.map(o => (o.platform+"|"+o.orderId).toLowerCase()));
+      let added = 0;
+      importRows.forEach(o => {
+        const key = (plat+"|"+o.orderId).toLowerCase();
+        if (o.orderId && existing.has(key)) return;
+        existing.add(key);
+        orders.push({
+          id:newId(), saved:new Date().toISOString(),
+          platform:plat, orderId:o.orderId, buyer:o.buyer, priceText:"", status:"offen",
+          snapshot:{v:2, fields:{platform:plat, orderId:o.orderId, buyer:o.buyer}}
+        });
+        added++;
+      });
+      persistOrders(); drawOrders(); modalHide();
+    };
+  };
+
+  $("impParse").onclick = () => {
+    const txt = $("impText").value.trim();
+    if (txt) readText(txt); else $("impFile").click();
+  };
+  $("impDrop").onclick = () => $("impFile").click();
+  $("impFile").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const txt = await f.text();
+    $("impText").value = txt.length > 4000 ? txt.slice(0,4000)+"\n…" : txt;
+    readText(txt);
+  };
+  ["dragenter","dragover"].forEach(t => $("impDrop").addEventListener(t, e=>{e.preventDefault();$("impDrop").classList.add("over");}));
+  ["dragleave","drop"].forEach(t => $("impDrop").addEventListener(t, e=>{e.preventDefault();$("impDrop").classList.remove("over");}));
+  $("impDrop").addEventListener("drop", async e => {
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const txt = await f.text();
+    $("impText").value = txt.length > 4000 ? txt.slice(0,4000)+"\n…" : txt;
+    readText(txt);
+  });
+}
+
+/* ---------- Modal ---------- */
+function modalShow(title, html){
+  $("modalTitle").textContent = title;
+  $("modalBody").innerHTML = html;
+  $("modal").classList.add("show");
+}
+function modalHide(){ $("modal").classList.remove("show"); }
+$("modalClose").onclick = modalHide;
+$("modal").addEventListener("click", e => { if (e.target === $("modal")) modalHide(); });
+addEventListener("keydown", e => { if (e.key === "Escape") modalHide(); });
+$("btnImport").onclick = openImport;
+
 /* ---------- Start ---------- */
 drawSwatches(); render();
+loadOrders(); drawOrders();
 try { const s = localStorage.getItem(STORE_KEY); if (s) applyState(JSON.parse(s)); } catch(e){}
 </script>
 </body>
