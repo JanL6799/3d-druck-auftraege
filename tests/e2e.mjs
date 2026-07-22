@@ -193,13 +193,19 @@ await test('3MF mit externer Objektdatei (Production Extension) wird aufgelöst'
   assert.equal(await text('#rDim'), '20 × 20 × 20 mm');
 });
 
-await test('Slicer-Zeit übersteuert die Schätzung', async () => {
-  await page.fill('#slicerTime', '2:30');
-  const t = await text('#rTime');
+// Nur im Backend vorhanden — die öffentliche Seite hat kein Slicer-Zeit-Übersteuerungsfeld.
+await test('Slicer-Zeit übersteuert die Schätzung (nur Backend)', async () => {
+  await loadStl(boxSTL(20,20,20), 'cube.stl', pageB);
+  await pageB.fill('#slicerTime', '2:30');
+  const t = await text('#rTime', pageB);
   assert.match(t, /2 h 30 min/);
   assert.match(t, /Slicer/);
-  await page.fill('#slicerTime', '');
-  assert.doesNotMatch(await text('#rTime'), /Slicer/);
+  await pageB.fill('#slicerTime', '');
+  assert.doesNotMatch(await text('#rTime', pageB), /Slicer/);
+});
+
+await test('index.html hat kein Slicer-Zeit-Feld mehr', async () => {
+  assert.equal(await page.$('#slicerTime'), null);
 });
 
 await test('Bauraum-Warnung berücksichtigt 90°-Drehung', async () => {
@@ -368,8 +374,20 @@ await test('backend.html: Kontakt-E-Mail wird nie gespeichert, auch nicht über 
   await assertEmailNeverPersisted(pageB);
 });
 
+// Im Unterschied zur E-Mail-Adresse ist der Notizen-Kommentar unkritisch und darf (soll)
+// über "Stand speichern" erhalten bleiben, damit ein wiederkehrender Besucher ihn nicht
+// erneut eintippen muss.
+await test('index.html: Notizen-Kommentar bleibt über "Stand speichern" erhalten', async () => {
+  await page.fill('#notes', 'Testkommentar für den Rundlauf');
+  await page.click('#btnSave');
+  const saved = await page.evaluate(() => localStorage.getItem('druckauftrag.v2'));
+  assert.ok(saved.includes('Testkommentar für den Rundlauf'),
+    '"Stand speichern" soll den Notizen-Kommentar sichern');
+});
+
 await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang, Kunden-Mail als reply_to', async () => {
   await page.fill('#customerEmail', 'kunde@beispiel.de');
+  await page.fill('#notes', 'Bitte ohne Stützen drucken.');
   const call = await page.evaluate(async () => {
     const orig = window.fetch;
     let captured = null;
@@ -386,6 +404,7 @@ await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang, Kun
   assert.equal(call.body.replyTo, 'kunde@beispiel.de');
   assert.match(call.body.subject, /^3D-Druck Auftrag/);
   assert.match(call.body.text, /Kontakt: kunde@beispiel\.de/);
+  assert.match(call.body.text, /Notizen: Bitte ohne Stützen drucken\./);
   assert.match(call.body.text, /Materialbedarf/);
   assert.match(call.body.text, /Preis: /);
   assert.doesNotMatch(call.body.text, /Plattform:/);

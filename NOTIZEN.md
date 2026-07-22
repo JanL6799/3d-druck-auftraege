@@ -180,6 +180,16 @@ verbindet, läuft über den API-Server auf dem Pi (`server/api-server.js`, `/api
   über der Auftragsliste („Neueste zuerst" / „Frist zuerst") schalten zwischen Speicherdatum
   und Dringlichkeit um; Aufträge ohne Termin landen bei „Frist zuerst" ans Ende statt das
   Ergebnis zu verfälschen.
+- **Slicer-Zeit-Übersteuerung nur im Backend.** index.html rechnet immer mit der eingebauten
+  Schätzung, `parseSlicerTime()`/das Eingabefeld existieren dort nicht mehr. `calc()` auf
+  index.html hat dadurch kein `slicer`-Flag mehr im Rückgabewert (auf beiden Seiten sonst
+  identischer Rechenweg).
+- **Notizen-Kommentar ist auf index.html zurück**, aber als eigene, volle Breite einnehmende
+  Karte ganz unten auf der Seite (nicht mehr Teil der entfernten Auftragsdaten-Karte). Nutzt
+  bewusst dieselbe Feld-ID `notes` wie im Backend — die schon vorhandene Mail-/PDF-Logik
+  (`g("notes")`) greift dadurch ohne weitere Änderung. Anders als die Kontakt-E-Mail **wird**
+  der Kommentar über „Stand speichern" gesichert (Teil von `FIELDS`) — unkritisch, kein
+  Datenschutzthema wie bei der E-Mail-Adresse.
 
 ## Was drin ist
 
@@ -218,9 +228,9 @@ Ab hier gilt alles für beide Seiten, außer wo **(nur Backend)** steht.
   gehört. Löchrige Meshes liefern beliebig falsche Volumina — statt still einen falschen Preis
   zu zeigen, warnt die App mit der Zahl der offenen Kanten. (Ab 300.000 Dreiecken wird die
   Prüfung aus Tempogründen übersprungen.)
-- **Slicer-Zeit:** Die eingebaute Druckzeit-Schätzung lässt sich pro Auftrag durch die echte
-  Zeit aus dem Slicer übersteuern (Formate: `4:30`, `270`, `1,5h`) — Maschinen- und Stromkosten
-  rechnen dann exakt. Kalkulation und PDF kennzeichnen das mit „Slicer“.
+- **Slicer-Zeit (nur Backend):** Die eingebaute Druckzeit-Schätzung lässt sich pro Auftrag durch
+  die echte Zeit aus dem Slicer übersteuern (Formate: `4:30`, `270`, `1,5h`) — Maschinen- und
+  Stromkosten rechnen dann exakt. Kalkulation und PDF kennzeichnen das mit „Slicer“.
 - **Vorschau:** eigener Software-Renderer auf Canvas (Painter's Algorithm, Flat-Shading),
   drehbar, zoombar, in der gewählten Filamentfarbe. Ab ~40.000 Dreiecken wird die Vorschau
   ausgedünnt (jedes n-te Dreieck), damit das Drehen flüssig bleibt — die Kalkulation rechnet
@@ -267,7 +277,7 @@ Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, B
 
 ## Verifiziert
 
-Die früheren Ad-hoc-Prüfungen sind jetzt **28 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
+Die früheren Ad-hoc-Prüfungen sind jetzt **30 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
 die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Läuft gegen zwei parallele
 Playwright-Pages: `page` (index.html) für alles Öffentliche, `pageB` (backend.html) für
 Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
@@ -276,7 +286,8 @@ Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
 - Wasserdichtheit: intakter Würfel warnt nicht, Würfel mit fehlendem Dreieck warnt.
 - 3MF mit ausgelagerter Objektdatei (Production Extension, z. B. aus Bambu Studio) wird
   korrekt aufgelöst.
-- Slicer-Zeit `2:30` übersteuert die Schätzung („2 h 30 min · Slicer“) und lässt sich leeren.
+- Slicer-Zeit `2:30` übersteuert die Schätzung („2 h 30 min · Slicer“) und lässt sich leeren —
+  auf `pageB` (index.html hat das Feld nicht mehr, eigener Test prüft dessen Abwesenheit).
 - Bauraum-Warnung inkl. 90°-Rotationslogik (12 × 30 passt, 12 × 20 nicht) — auf `pageB`.
 - CSV-Import filtert Duplikate/Leerzeilen; Klick lädt Bestellnummer und Käufer — auf `pageB`.
 - Auftragsänderung löst einen Server-Backup-Versuch aus (`POST /api/backup`, fire-and-forget) —
@@ -291,11 +302,13 @@ Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
 - Farbwahl legt das Material (und damit den Materialpreis) für die Kalkulation fest.
 - Mail-Button warnt ohne gültige Kunden-E-Mail (leer oder falsches Format).
 - Kontakt-E-Mail landet nach „Stand speichern" weder in `localStorage` noch in `snapshot()` —
-  auf beiden Seiten einzeln geprüft.
+  auf beiden Seiten einzeln geprüft; der Notizen-Kommentar dagegen **wird** gesichert (bewusster
+  Unterschied, siehe „Öffentliche Seite vs. Backend").
 - Mail-Versand: „Per Mail senden“ schickt Auftrag inkl. echtem STL- und Stand-JSON-Anhang an
-  `/api/send-mail`, mit der Kunden-E-Mail als `replyTo` im Payload und als „Kontakt: …“-Zeile
-  im Mailtext; ohne geladenes Modell erscheint stattdessen eine Warnung. Mailtext enthält
-  bewusst kein Plattform/Bestellnummer/Käufer/Liefern-bis mehr (index.html hat diese Felder nicht).
+  `/api/send-mail`, mit der Kunden-E-Mail als `replyTo` im Payload, als „Kontakt: …“-Zeile und
+  dem Notizen-Kommentar als „Notizen: …“-Zeile im Mailtext; ohne geladenes Modell erscheint
+  stattdessen eine Warnung. Mailtext enthält bewusst kein Plattform/Bestellnummer/Käufer/
+  Liefern-bis mehr (index.html hat diese Felder nicht).
 - Darstellung-Umschalter merkt sich die Wahl über einen Reload.
 - v1-Stand migriert (einmal mit der vollen Feldliste auf `pageB`, einmal mit der kurzen
   Feldliste auf `page`), neuere Formate werden mit klarer Meldung abgelehnt.
@@ -328,6 +341,22 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Dreizehnte Runde (22. Juli 2026):
+
+1. **Slicer-Zeit-Übersteuerung aus index.html entfernt**, existiert nur noch im Backend.
+   `parseSlicerTime()` und das `slicer`-Rückgabefeld von `calc()` komplett aus index.html
+   entfernt statt nur das Eingabefeld zu verstecken — index.html rechnet jetzt ausschließlich
+   mit der eingebauten Schätzung.
+2. **Notizen-Kommentar zu index.html zurückgebracht**, aber als eigene, volle Breite
+   einnehmende Karte ganz unten auf der Seite statt als Teil der (entfernten)
+   Auftragsdaten-Karte. Wird per Mail mitverschickt — die dafür nötige Logik (`g("notes")` in
+   PDF/Mail-Handler) war schon vorhanden und musste nicht angefasst werden, da dieselbe
+   Feld-ID `notes` wiederverwendet wird. Anders als die Kontakt-E-Mail wird der Kommentar
+   bewusst über „Stand speichern" gesichert.
+3. **Playwright-Suite angepasst:** Slicer-Zeit-Test auf `pageB` verschoben (lädt jetzt selbst
+   ein Modell), neuer Test prüft die Abwesenheit von `#slicerTime` auf index.html, neuer Test
+   für die Notizen-Persistenz, Mail-Test um eine Notizen-Zeile ergänzt. 30/30 Tests grün.
 
 Zwölfte Runde (22. Juli 2026):
 
