@@ -296,6 +296,16 @@
       <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
     </div>
 
+    <div class="card">
+      <h3>Kontakt</h3>
+      <p class="sub">Damit ich mich bei dir melden kann.</p>
+      <label for="customerEmail">Deine E-Mail-Adresse</label>
+      <input id="customerEmail" type="email" placeholder="du@beispiel.de" required>
+      <p class="hint" style="text-align:left;margin-top:6px">
+        Pflichtfeld für „Per Mail senden“ — ich antworte direkt an diese Adresse.
+      </p>
+    </div>
+
   </div>
 </div>
 <div class="foot"><a href="impressum.html" style="color:inherit">Impressum</a></div>
@@ -353,21 +363,25 @@ const PALETTE = PALETTE_LINES.flatMap(g =>
 
 const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
-// Die Kalkulationsbasis (Strompreis, Maschine €/h, Marge, Bauraum …) wird nur im Backend
-// (backend.html) eingestellt und dort in diesen Key geschrieben — diese öffentliche Seite hat
-// dafür kein eigenes Eingabefeld, sondern liest ihn nur (siehe CALCBASE weiter unten).
-const CALCBASE_KEY = "druckauftrag.calcbase.v1";
-// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js) für den Mailversand.
-// X-Backup-Secret ist kein echtes Geheimnis — steht im öffentlichen Quelltext dieser Seite —
-// sondern nur eine Hürde gegen zufälliges Abgreifen durch Bots.
+// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js) für Mailversand und
+// Kalkulationsbasis. X-Backup-Secret ist kein echtes Geheimnis — steht im öffentlichen
+// Quelltext dieser Seite — sondern nur eine Hürde gegen zufälliges Abgreifen durch Bots.
 const MAIL_API_URL = "/api/send-mail";
+const CALCBASE_API_URL = "/api/calcbase";
 const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
 
-// Feste Startwerte, falls das Backend noch nie gespeichert hat (frischer Browser/Origin).
-// Danach übernimmt CALCBASE_KEY, den backend.html bei jeder Kalkulation aktuell hält.
+// Die Kalkulationsbasis (Strompreis, Maschine €/h, Marge, Bauraum …) wird nur im Backend
+// eingestellt — diese öffentliche Seite hat kein eigenes Eingabefeld dafür. Backend und
+// index.html sind unterschiedliche Origins (backend.html ist nur im Heimnetz erreichbar,
+// siehe NOTIZEN.md "Öffentliche Seite vs. Backend"), teilen sich also KEINEN localStorage
+// mehr — die Werte kommen deshalb per Fetch vom API-Server auf dem Pi, nicht aus dem Browser.
+// Feste Startwerte gelten, bis die Antwort da ist bzw. falls das Backend noch nie gespeichert hat.
 const CALCBASE_DEFAULTS = {pWatt:120,pKwh:0.27,pMachine:1,pSetup:1.5,pMargin:15,pVat:0,bx:256,by:256,bz:256};
 let CALCBASE = {...CALCBASE_DEFAULTS};
-try { Object.assign(CALCBASE, JSON.parse(localStorage.getItem(CALCBASE_KEY)) || {}); } catch(e){}
+fetch(CALCBASE_API_URL, { headers: { "X-Backup-Secret": BACKUP_SECRET } })
+  .then(r => r.ok ? r.json() : null)
+  .then(d => { if (d && typeof d === "object") { Object.assign(CALCBASE, d); render(); } })
+  .catch(() => { /* z. B. lokal per Doppelklick geöffnet, kein API-Server erreichbar */ });
 
 /* ---------- Zustand ---------- */
 let mesh = null;
@@ -1076,11 +1090,20 @@ function meshToSTLBlob(tris, sourceName){
   return new Blob([buf], {type:"model/stl"});
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 $("btnMail").onclick = async () => {
   const r = calc();
   if (!r){ const w=$("warn"); w.className="warnbox show";
            w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
            return; }
+  const customerEmail = $("customerEmail").value.trim();
+  if (!EMAIL_RE.test(customerEmail)){
+    const w=$("warn"); w.className="warnbox show";
+    w.textContent="Bitte eine gültige E-Mail-Adresse eintragen — nur so kann ich mich bei dir melden.";
+    $("customerEmail").focus();
+    return;
+  }
   const g = id => { const el = $(id); return el ? el.value.trim() : ""; };
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
 
@@ -1091,8 +1114,10 @@ $("btnMail").onclick = async () => {
   const stand = snapshot();
   delete stand.mesh; delete stand.meshHash;
   stand.meshFile = stlName;
+  stand.customerEmail = customerEmail;
 
   const lines = [
+    `Kontakt: ${customerEmail}`,
     `Material: ${r.mat.line||"–"} · ${eur(+r.mat.price||0)}/kg`,
     `Farbe: ${color.n} (${color.c.toUpperCase()})`,
     `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
@@ -1117,7 +1142,7 @@ $("btnMail").onclick = async () => {
     const res = await fetch(MAIL_API_URL, {
       method: "POST",
       headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
-      body: JSON.stringify({ subject, text: lines,
+      body: JSON.stringify({ subject, text: lines, replyTo: customerEmail,
         attachments: [ {filename:stlName, content:stlContent}, {filename:standName, content:standContent} ] })
     });
     const data = await res.json().catch(() => ({}));

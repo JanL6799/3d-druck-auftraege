@@ -19,8 +19,9 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 |---|---|
 | `index.html` | Öffentliche Seite: Modell, Kalkulation, Material, PDF, Mail — keine Auftragsverwaltung |
 | `backend.html` | Internes Backend: zusätzlich Kalkulationsbasis, Auftragsdaten, Aufträge (Suche/Filter/CSV-Import/Backup) |
-| `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup + Mail-Versand), siehe unten |
+| `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup, Mail-Versand, Kalkulationsbasis), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
+| `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
 | `tests/e2e.mjs` | 24 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
@@ -30,12 +31,16 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 Läuft produktiv auf dem Raspberry Pi unter `https://drucken.luetje.me`, zusätzlich zur
 lokalen Doppelklick-Nutzung. Setup:
 
-- **nginx** liefert `index.html` und `backend.html` statisch aus `/var/www/drucken.luetje.me/`
-  aus (Port 80, kein PHP/Node dahinter — reine Dateien). Nicht direkt aus dem Repo-Checkout im
+- **nginx liefert `index.html` öffentlich** aus `/var/www/drucken.luetje.me/index.html`
+  (Port 80, kein PHP/Node dahinter — reine Datei). Nicht direkt aus dem Repo-Checkout im
   Home-Verzeichnis, weil `/home/jan` `drwx------` ist und `www-data` da nicht durchkäme.
-  `backend.html` hängt an keiner nginx-Location mit eigenem Zugriffsschutz — erreichbar ist es
-  über dieselbe öffentliche Domain wie `index.html`, nur eben nicht verlinkt. Siehe „Offene
-  Punkte" zur fehlenden Zugriffskontrolle.
+- **`backend.html` liegt separat und nur im Heimnetz** unter `/var/www/backend.druckauftrag/`,
+  ausgeliefert von einer eigenen nginx-Site auf Port 8080 — dieser Port ist **nicht** im
+  Cloudflare-Tunnel konfiguriert (siehe unten) und damit von außen unerreichbar, zusätzlich per
+  `allow`/`deny` auf private Adressbereiche beschränkt. Aufruf: `http://<Pi-LAN-IP>:8080/`.
+  `deploy/setup-backend-lokal.sh` richtet das ein (siehe unten) — vorher unbedingt die
+  bestehende Auftragsliste per „Backup exportieren" sichern, der Ortswechsel ist ein
+  Origin-Wechsel und nimmt den bisherigen `localStorage`-Stand nicht automatisch mit.
 - **Cloudflare Tunnel** (`cloudflared`, systemd-Dienst, `enabled`) verbindet den Pi ausgehend
   mit Cloudflare — kein eingehendes Port-Forwarding nötig. Grund: Der Hauptanschluss läuft
   über Starlink, das hinter Carrier-Grade-NAT sitzt (WAN-IP im `100.64.0.0/10`-Bereich),
@@ -44,26 +49,35 @@ lokalen Doppelklick-Nutzung. Setup:
 - **DNS:** `drucken.luetje.me` ist ein CNAME auf den Tunnel (von `cloudflared tunnel route dns`
   gesetzt), TLS/HTTPS übernimmt Cloudflare am Edge. Kein certbot/Let's-Encrypt-Zertifikat auf
   dem Pi nötig.
-- **Update nach Codeänderung:** Weder `index.html` noch `backend.html` liegen automatisch aktuell
-  im Webroot, nach `git pull` beide manuell nachziehen:
-  `sudo cp index.html backend.html /var/www/drucken.luetje.me/`.
+- **Update nach Codeänderung:** `index.html` liegt nicht automatisch aktuell im Webroot, nach
+  `git pull` manuell nachziehen: `sudo cp index.html /var/www/drucken.luetje.me/`. Für
+  `backend.html` dieselbe Kopie nach `/var/www/backend.druckauftrag/` (oder das Setup-Skript
+  erneut laufen lassen, siehe unten).
 - **API-Server** (`server/api-server.js`, systemd-Dienst `druckauftrag-backup`, nur
-  `127.0.0.1:8181`), zwei Routen:
+  `127.0.0.1:8181`), vier Routen:
   - `POST /api/backup` — aktuelle Auftragsliste (`persistOrders()` ruft das bei jeder Änderung
     mit) landet unter `/var/backups/druckauftrag/` (`latest.json` + eine Tageskopie).
   - `POST /api/send-mail` — verschickt die Auftrags-Mail über die **Resend-API**
     (`https://api.resend.com/emails`) inklusive echtem Dateianhang (Modell als STL, Stand als
-    JSON, jeweils base64 im Request-Body vom Client). Absender `onboarding@resend.dev`
+    JSON, jeweils base64 im Request-Body vom Client) und `reply_to` (die vom Kunden
+    eingetragene Kontakt-E-Mail, serverseitig per Regex geprüft). Absender `onboarding@resend.dev`
     (Resend-Testdomain, funktioniert ohne eigene Domain-Verifizierung nur an die eigene
     Resend-Account-Adresse — reicht, weil immer an `jan@luetje.me` verschickt wird). Für Mails
     an andere Adressen müsste `luetje.me` erst bei Resend verifiziert werden (DNS-Einträge über
     Cloudflare).
+  - `GET`/`POST /api/calcbase` — Kalkulationsbasis als kleine JSON-Datei unter
+    `/var/backups/druckauftrag/calcbase.json`. Ersetzt seit der Trennung von `backend.html`
+    auf einen eigenen Origin den früheren `localStorage`-Sharing-Mechanismus (siehe
+    „Öffentliche Seite vs. Backend").
 
-  nginx leitet beide Pfade weiter. `X-Backup-Secret` ist **kein echtes Geheimnis** — die App ist
-  eine öffentliche, clientseitige Seite, der Wert steht im Quelltext und im öffentlichen
-  GitHub-Repo. Er bremst nur zufälliges Abgreifen durch Bots, kein Schutz gegen gezielte
-  Angriffe. Der **Resend-API-Key dagegen ist ein echtes Geheimnis** und steht nur server-seitig
-  als Umgebungsvariable — niemals im Quelltext oder im Repo committen. Setup auf dem Pi:
+  nginx leitet alle vier Pfade weiter — **öffentliche Site** bekommt `/api/send-mail` und
+  `/api/calcbase` (GET, von index.html gelesen), **Heimnetz-Site** (`backend-lokal`, Port 8080)
+  bekommt zusätzlich `/api/backup` und schreibt `/api/calcbase` (POST). `X-Backup-Secret` ist
+  **kein echtes Geheimnis** — die Apps sind clientseitige Seiten, der Wert steht im Quelltext
+  und im öffentlichen GitHub-Repo. Er bremst nur zufälliges Abgreifen durch Bots, kein Schutz
+  gegen gezielte Angriffe. Der **Resend-API-Key dagegen ist ein echtes Geheimnis** und steht nur
+  server-seitig als Umgebungsvariable — niemals im Quelltext oder im Repo committen. Setup auf
+  dem Pi:
   ```
   sudo mkdir -p /var/backups/druckauftrag
   sudo chown jan:jan /var/backups/druckauftrag
@@ -71,12 +85,12 @@ lokalen Doppelklick-Nutzung. Setup:
   systemd-Unit `/etc/systemd/system/druckauftrag-backup.service`:
   ```
   [Unit]
-  Description=API-Server für die 3D-Druck-Auftragserfassung (Backup + Mail-Versand)
+  Description=API-Server für die 3D-Druck-Auftragserfassung (Backup, Mail-Versand, Kalkulationsbasis)
   After=network.target
 
   [Service]
   ExecStart=/usr/bin/node /home/jan/3d-druck-auftraege/server/api-server.js
-  Environment=BACKUP_SECRET=<gleicher Wert wie BACKUP_SECRET in index.html>
+  Environment=BACKUP_SECRET=<gleicher Wert wie BACKUP_SECRET in index.html/backend.html>
   Environment=BACKUP_DIR=/var/backups/druckauftrag
   Environment=RESEND_API_KEY=<Resend-API-Key, NICHT ins Repo>
   Environment=MAIL_TO=jan@luetje.me
@@ -88,23 +102,28 @@ lokalen Doppelklick-Nutzung. Setup:
   ```
   nginx-Ergänzung in `/etc/nginx/sites-available/drucken.luetje.me` (vor der `location /`):
   ```
-  location /api/backup {
-      proxy_pass http://127.0.0.1:8181/backup;
-      client_max_body_size 25m;
-  }
   location /api/send-mail {
       proxy_pass http://127.0.0.1:8181/send-mail;
       client_max_body_size 35m;
+  }
+  location /api/calcbase {
+      proxy_pass http://127.0.0.1:8181/calcbase;
   }
   ```
   Danach `sudo systemctl daemon-reload && sudo systemctl enable --now druckauftrag-backup`
   und `sudo systemctl reload nginx`.
 
-  `deploy/setup-mail-feature.sh` automatisiert genau diese drei Schritte (Webroot-Kopie,
-  Unit-Umstellung inkl. `RESEND_API_KEY`-Abfrage, nginx-Route) für den Fall, dass die Mail-
-  Route je neu aufgesetzt werden muss — `BACKUP_SECRET`/`BACKUP_DIR` übernimmt es unverändert
-  aus der laufenden Unit, fragt nur den Resend-Key interaktiv ab (landet nirgends im Klartext
-  im Repo oder in einer Konversation). Aufruf: `sudo bash deploy/setup-mail-feature.sh`.
+  `deploy/setup-mail-feature.sh` automatisiert die Resend-/systemd-Seite davon (Webroot-Kopie,
+  Unit-Umstellung inkl. `RESEND_API_KEY`-Abfrage, `/api/send-mail`-Route) — `BACKUP_SECRET`/
+  `BACKUP_DIR` übernimmt es unverändert aus der laufenden Unit, fragt nur den Resend-Key
+  interaktiv ab (landet nirgends im Klartext im Repo oder in einer Konversation). Aufruf:
+  `sudo bash deploy/setup-mail-feature.sh`.
+
+  `deploy/setup-backend-lokal.sh` richtet die Heimnetz-Site für `backend.html` ein (eigener
+  Webroot, eigene nginx-Site auf Port 8080, `/api/backup`+`/api/calcbase`-Route dort, ergänzt
+  `/api/calcbase` auf der öffentlichen Site) und entfernt `backend.html` aus dem öffentlichen
+  Webroot, falls es dort lag. Fragt vorher interaktiv, ob die Auftragsliste schon exportiert
+  wurde (Origin-Wechsel, siehe oben). Aufruf: `sudo bash deploy/setup-backend-lokal.sh`.
 
 **Kein `build_standalone.py` wie in den anderen Ordnern.** Diese Seite wurde von vornherein als
 vollständiges HTML-Dokument mit eigenem `<head>` geschrieben, nicht als Artifact-Quelle. Sie hat
@@ -116,27 +135,42 @@ Build-Skript wie bei PV und E-Auto.
 
 ## Öffentliche Seite vs. Backend
 
-`index.html` und `backend.html` sind zwei separate HTML-Dokumente, die sich über denselben
-Origin (`drucken.luetje.me`) denselben `localStorage` teilen — kein Server, keine gemeinsame
-Datenbank nötig, reines Browser-Feature.
+`index.html` (öffentlich, `https://drucken.luetje.me`) und `backend.html` (nur im Heimnetz,
+eigener Port, siehe „Deployment") sind zwei separate HTML-Dokumente auf **unterschiedlichen
+Origins** — sie teilen sich deshalb **keinen** `localStorage` mehr. Was sie trotzdem
+verbindet, läuft über den API-Server auf dem Pi (`server/api-server.js`, `/api/calcbase`).
 
 - **index.html** (öffentlich): Modelldatei, Druckeinstellungen, Kalkulation, Material & Farbe,
-  „PDF exportieren", „Per Mail senden" (hervorgehoben, steht als letzter Knopf in der Kopfzeile —
-  die Hauptaktion für alle, die die Seite aufrufen). Kennt weder Kalkulationsbasis-Eingabefelder
-  noch Auftragsdaten noch die Auftragsliste. Die Kalkulationsbasis liest es nur lesend aus
-  `druckauftrag.calcbase.v1` (`CALCBASE`-Objekt im Code, mit eingebauten Startwerten, falls der
-  Key noch nie geschrieben wurde).
-- **backend.html** (intern, für Jan): identisch zu index.html, zusätzlich Kalkulationsbasis
-  (schreibt bei jeder Kalkulation nach `druckauftrag.calcbase.v1`), Auftragsdaten und Aufträge
-  (Suche, Status, Filter, CSV-Import, Backup, Umsatz-CSV) — die komplette bisherige Anwendung,
-  nur umbenannt/mit Link zurück zur öffentlichen Seite im Footer.
+  Kontakt-E-Mail (Pflichtfeld für „Per Mail senden"), „PDF exportieren", „Per Mail senden"
+  (hervorgehoben, steht als letzter Knopf in der Kopfzeile — die Hauptaktion für alle, die die
+  Seite aufrufen). Kennt weder Kalkulationsbasis-Eingabefelder noch Auftragsdaten noch die
+  Auftragsliste. Die Kalkulationsbasis holt es per `fetch("/api/calcbase")` einmal beim Laden
+  (`CALCBASE`-Objekt im Code, mit eingebauten Startwerten als Fallback, falls der API-Server
+  nicht erreichbar ist, z. B. beim lokalen Doppelklick-Öffnen ohne Server).
+- **backend.html** (intern, für Jan, nur im Heimnetz erreichbar): identisch zu index.html,
+  zusätzlich Kalkulationsbasis (schreibt bei jeder Kalkulation per `POST /api/calcbase`),
+  Auftragsdaten und Aufträge (Suche, Status, Filter, Frist-Sortierung, CSV-Import, Backup,
+  Umsatz-CSV) — die komplette bisherige Anwendung, nur umbenannt/mit Link zurück zur
+  öffentlichen Seite im Footer.
 - **Warum kein `#orderId`/`#buyer` mehr in index.html:** Diese Felder waren Jans eigene
   Bestell-Verwaltung, nicht Teil dessen, was jemand von außen ausfüllen soll. Wer über
-  index.html eine Anfrage schickt, tut das komplett anonym über „Per Mail senden" — Jan trägt
-  Plattform/Bestellnummer/Käufer erst im Backend nach, wenn er die Mail bearbeitet.
+  index.html eine Anfrage schickt, trägt nur seine eigene Kontakt-E-Mail ein und schickt den
+  Rest über „Per Mail senden" — Jan trägt Plattform/Bestellnummer/Käufer erst im Backend nach,
+  wenn er die Mail bearbeitet.
 - **PDF/Mail auf index.html ohne Auftragsdaten:** Beide Funktionen laufen unverändert, zeigen
   für Plattform/Bestellnummer/Käufer/Liefern-bis/Notizen aber leer bzw. „–", weil es dafür kein
   Eingabefeld mehr gibt (`g()`-Helfer in beiden Handlern ist jetzt Null-sicher).
+- **Kontakt-E-Mail:** Pflichtfeld auf beiden Seiten (`#customerEmail`, einfache Regex-Prüfung
+  client- und serverseitig). Geht als `replyTo` an `/api/send-mail`, der Server reicht sie als
+  `reply_to` an Resend weiter — eine normale Antwort im Mailprogramm geht damit direkt an den
+  Kunden, nicht an die Resend-Testabsenderadresse. Steht zusätzlich als Klartextzeile
+  („Kontakt: …") im Mailtext, falls jemand die Mail ohne Antwortfunktion weiterverarbeitet.
+- **Frist-Countdown (nur Backend):** `dueDays()`/`dueLabel()` errechnen aus dem
+  „Liefern bis"-Feld die Resttage und zeigen sie als kleine Badge neben dem Status
+  (grau = mehr als 2 Tage, amber = ≤ 2 Tage/heute fällig, rot = überfällig). Zwei Sortierchips
+  über der Auftragsliste („Neueste zuerst" / „Frist zuerst") schalten zwischen Speicherdatum
+  und Dringlichkeit um; Aufträge ohne Termin landen bei „Frist zuerst" ans Ende statt das
+  Ergebnis zu verfälschen.
 
 ## Was drin ist
 
@@ -149,6 +183,11 @@ Ab hier gilt alles für beide Seiten, außer wo **(nur Backend)** steht.
   Badge schaltet weiter), dazu **Suche** (Bestellnummer/Käufer/Plattform) und **Filter-Chips**
   pro Status. **⧉ dupliziert** einen Auftrag für Wiederholungskäufe — gleiches Modell und
   gleiche Einstellungen, Käufer/Bestellnummer/Termin leer.
+- **Frist-Countdown & Sortierung (nur Backend):** Badge neben dem Status zeigt die Resttage
+  bis „Liefern bis" (grau/amber/rot je nach Dringlichkeit), zwei Chips über der Liste
+  schalten zwischen „Neueste zuerst" (Standard) und „Frist zuerst" um. Rein internes
+  Hilfsmittel zum eigenen Priorisieren — Kunden sehen weder die Auftragsliste noch dieses
+  Feld, index.html hat kein „Liefern bis"-Eingabefeld.
 - **Speicher-Diät (nur Backend):** Aufträge betten die Modellgeometrie nicht mehr einzeln ein,
   sondern referenzieren sie per Hash im deduplizierten Mesh-Speicher (`druckauftrag.meshes.v1`).
   Zehn Aufträge mit demselben Modell kosten so nur einmal Quota; verwaiste Geometrien werden
@@ -190,7 +229,8 @@ Ab hier gilt alles für beide Seiten, außer wo **(nur Backend)** steht.
   Bewusst ohne jsPDF, das wäre eine externe Abhängigkeit.
 - **Mail:** „Per Mail senden“ verschickt Auftrag, Modell (als STL) und Stand direkt über den
   API-Server auf dem Pi (Resend-API) an Jan — echter Anhang, kein mailto:-Link und kein
-  manueller Download mehr. Siehe „Deployment“ oben.
+  manueller Download mehr. Erfordert eine Kontakt-E-Mail (Pflichtfeld, siehe „Öffentliche Seite
+  vs. Backend"), die als `reply_to` mitgeht. Siehe „Deployment“ oben.
 - **Zwischenstand:** JSON-Download inklusive Modellgeometrie und Farbe.
   Zusätzlich in `localStorage` (Schlüssel `druckauftrag.v2`) → beim Öffnen ist der letzte Stand da.
 
@@ -218,7 +258,7 @@ Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, B
 
 ## Verifiziert
 
-Die früheren Ad-hoc-Prüfungen sind jetzt **24 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
+Die früheren Ad-hoc-Prüfungen sind jetzt **26 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
 die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Läuft gegen zwei parallele
 Playwright-Pages: `page` (index.html) für alles Öffentliche, `pageB` (backend.html) für
 Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
@@ -237,9 +277,13 @@ Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
   auf `pageB`.
 - Duplizieren übernimmt das Modell, leert Käufer/Bestellnummer — auf `pageB`.
 - Backup-Restore übernimmt neue Aufträge und überspringt bekannte IDs — auf `pageB`.
+- Frist-Countdown zeigt „X Tage überfällig"/„noch X Tage" korrekt und „Frist zuerst" sortiert
+  überfällig → bald fällig → weit entfernt → ohne Termin — auf `pageB`.
 - Farbwahl legt das Material (und damit den Materialpreis) für die Kalkulation fest.
+- Mail-Button warnt ohne gültige Kunden-E-Mail (leer oder falsches Format).
 - Mail-Versand: „Per Mail senden“ schickt Auftrag inkl. echtem STL- und Stand-JSON-Anhang an
-  `/api/send-mail`; ohne geladenes Modell erscheint stattdessen eine Warnung. Mailtext enthält
+  `/api/send-mail`, mit der Kunden-E-Mail als `replyTo` im Payload und als „Kontakt: …“-Zeile
+  im Mailtext; ohne geladenes Modell erscheint stattdessen eine Warnung. Mailtext enthält
   bewusst kein Plattform/Bestellnummer/Käufer/Liefern-bis mehr (index.html hat diese Felder nicht).
 - Darstellung-Umschalter merkt sich die Wahl über einen Reload.
 - v1-Stand migriert (einmal mit der vollen Feldliste auf `pageB`, einmal mit der kurzen
@@ -273,6 +317,27 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Elfte Runde (22. Juli 2026):
+
+1. **Kontakt-E-Mail-Pflichtfeld ergänzt** (`#customerEmail`, neue Karte „Kontakt" auf beiden
+   Seiten). Blockiert „Per Mail senden" mit einer Warnung, solange keine gültige Adresse
+   drinsteht. Geht als `replyTo` an `/api/send-mail`, der Server reicht sie geprüft als
+   `reply_to` an Resend weiter und ergänzt sie zusätzlich als Klartextzeile im Mailtext.
+2. **Frist-Countdown + Sortierung für die Auftragsliste** (nur Backend). Neue Helfer
+   `dueDays()`/`dueLabel()` errechnen aus „Liefern bis" die Resttage, zeigen sie als farbige
+   Badge (grau/amber/rot), zwei neue Sortier-Chips schalten zwischen „Neueste zuerst" und
+   „Frist zuerst" um.
+3. **`backend.html` ist nicht mehr aus dem Internet erreichbar**, nur noch im Heimnetz (Port
+   8080, außerhalb des Cloudflare-Tunnels, zusätzlich per nginx `allow`/`deny` auf private
+   Adressbereiche beschränkt). Löst den in der zehnten Runde offen gelassenen Punkt zur
+   fehlenden Zugriffskontrolle. Neues Skript `deploy/setup-backend-lokal.sh`.
+4. **Kalkulationsbasis-Sync auf den Server verlegt** (`GET`/`POST /api/calcbase`), weil
+   `backend.html` durch Punkt 3 einen eigenen Origin bekam und sich damit keinen `localStorage`
+   mehr mit `index.html` teilt. Ersetzt den bisherigen `localStorage`-Sharing-Mechanismus aus
+   der zehnten Runde, der dadurch obsolet wurde.
+5. **Playwright-Suite erweitert:** E-Mail-Pflichtfeld-Validierung, `reply_to` im Mail-Payload,
+   Frist-Countdown-Text und -Sortierung, E-Mail-Feld-Präsenz auf beiden Seiten — 26/26 Tests grün.
 
 Zehnte Runde (22. Juli 2026):
 
@@ -401,12 +466,14 @@ Zweite Runde:
    CAD-Kernel.
 3. **Drucker-Profile.** Wer mehrere Drucker hat, stellt Bauraum/Leistung/€-pro-h bisher von Hand
    um — benannte Profile wären der nächste sinnvolle Ausbau.
-4. **`backend.html` hat keinen eigenen Zugriffsschutz.** Es ist nur nicht verlinkt, aber über
-   dieselbe öffentliche Domain unter demselben Pfadschema erreichbar wie `index.html` — wer die
-   URL errät oder in den öffentlichen GitHub-Repo-Dateinamen nachschaut, kommt an Jans komplette
-   Auftragsliste (Käufernamen, Bestellnummern) und Kalkulationsbasis (Betriebskosten, Marge).
-   Ein einfacher HTTP-Basic-Auth-Block in nginx für genau diesen einen Pfad wäre der
-   naheliegendste nächste Schritt.
-5. **Kalkulationsbasis ist ein einziger geteilter Wert, nicht pro Drucker/Profil.** Hängt mit
-   Punkt 3 zusammen — sobald es benannte Drucker-Profile gibt, müsste `CALCBASE_KEY` das
+4. **Kalkulationsbasis ist ein einziger geteilter Wert, nicht pro Drucker/Profil.** Hängt mit
+   Punkt 3 zusammen — sobald es benannte Drucker-Profile gibt, müsste `/api/calcbase` das
    gewählte Profil mit übertragen, nicht nur einen einzelnen Wertesatz.
+5. **`/api/calcbase` prüft nur `X-Backup-Secret`, kein Rate-Limit.** Wer den (nicht-geheimen)
+   Header kennt, könnte die öffentlich erreichbare `POST`-Route theoretisch fluten oder mit
+   Unsinnswerten überschreiben — niedriges Risiko (nur Kalkulationsbasis, kein Zugriff auf
+   Aufträge/Kundendaten), aber kein Schutz dagegen eingebaut.
+6. **Heimnetz-Beschränkung von `backend.html` ist noch nicht auf dem Pi ausgeführt worden** —
+   `deploy/setup-backend-lokal.sh` liegt bereit, muss aber noch einmal per `sudo bash` laufen
+   (siehe „Deployment"). Bis dahin ist `backend.html` weiterhin unter der alten öffentlichen
+   Adresse erreichbar, falls es dort schon einmal kopiert wurde.

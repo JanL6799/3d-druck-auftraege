@@ -300,6 +300,40 @@ await test('Backup-Restore übernimmt neue Aufträge, überspringt bekannte', as
   assert.equal(again, 0);
 });
 
+await test('Aufträge: Frist-Countdown zeigt korrekten Text und sortiert nach Dringlichkeit', async () => {
+  // Lokale Kalendertage statt toISOString() — die App vergleicht in Lokalzeit (Mitternacht),
+  // UTC-Strings könnten je nach Zeitzone/Uhrzeit auf den falschen Tag fallen.
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow  = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  const farOut    = new Date(today); farOut.setDate(farOut.getDate() + 10);
+
+  await pageB.evaluate(({over, soon, far}) => applyBackup({
+    v:1, type:'druckauftrag-backup',
+    orders:[
+      { id:'due-over', saved:new Date().toISOString(), platform:'Direktanfrage', orderId:'D-OVER', buyer:'', priceText:'', status:'offen', snapshot:{v:2, fields:{due:over}} },
+      { id:'due-soon', saved:new Date().toISOString(), platform:'Direktanfrage', orderId:'D-SOON', buyer:'', priceText:'', status:'offen', snapshot:{v:2, fields:{due:soon}} },
+      { id:'due-far',  saved:new Date().toISOString(), platform:'Direktanfrage', orderId:'D-FAR',  buyer:'', priceText:'', status:'offen', snapshot:{v:2, fields:{due:far}} },
+    ],
+    meshes:{}
+  }), {over: fmt(yesterday), soon: fmt(tomorrow), far: fmt(farOut)});
+
+  await pageB.click('.fchip[data-sort="frist"]');
+  const order = await pageB.$$eval('.oitem', els => els.map(el => el.dataset.id));
+  const idx = id => order.indexOf(id);
+  assert.ok(idx('due-over') < idx('due-soon'), 'überfälliger Auftrag steht vor "bald fällig"');
+  assert.ok(idx('due-soon') < idx('due-far'), '"bald fällig" steht vor weit entferntem Termin');
+  assert.ok(idx('due-far') < idx('restore-test-1'), 'Auftrag mit Termin steht vor Auftrag ohne Termin');
+
+  const overText = await pageB.$eval('.oitem[data-id="due-over"] .due-over', el => el.textContent);
+  assert.match(overText, /1 Tag überfällig/);
+  const soonText = await pageB.$eval('.oitem[data-id="due-soon"] .due-soon', el => el.textContent);
+  assert.match(soonText, /noch 1 Tag/);
+
+  await pageB.click('.fchip[data-sort="neu"]');   // Standard-Sortierung für nachfolgende Tests wiederherstellen
+});
+
 await test('Farbwahl legt Material für die Kalkulation fest', async () => {
   const cMatBefore = await page.evaluate(() => calc().cMat);
   await page.locator('.sw[data-line="PETG-CF"]').first().click();
@@ -308,7 +342,17 @@ await test('Farbwahl legt Material für die Kalkulation fest', async () => {
   assert.notEqual(cMatAfter, cMatBefore);
 });
 
-await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang über /api/send-mail', async () => {
+await test('Mail-Button warnt ohne gültige Kunden-E-Mail', async () => {
+  await page.fill('#customerEmail', '');
+  await page.click('#btnMail');
+  assert.match(await text('#warn'), /gültige E-Mail-Adresse/);
+  await page.fill('#customerEmail', 'keine-email');
+  await page.click('#btnMail');
+  assert.match(await text('#warn'), /gültige E-Mail-Adresse/);
+});
+
+await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang, Kunden-Mail als reply_to', async () => {
+  await page.fill('#customerEmail', 'kunde@beispiel.de');
   const call = await page.evaluate(async () => {
     const orig = window.fetch;
     let captured = null;
@@ -322,7 +366,9 @@ await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang übe
     return captured;
   });
   assert.equal(call.url, '/api/send-mail');
+  assert.equal(call.body.replyTo, 'kunde@beispiel.de');
   assert.match(call.body.subject, /^3D-Druck Auftrag/);
+  assert.match(call.body.text, /Kontakt: kunde@beispiel\.de/);
   assert.match(call.body.text, /Materialbedarf/);
   assert.match(call.body.text, /Preis: /);
   assert.doesNotMatch(call.body.text, /Plattform:/);
@@ -371,18 +417,22 @@ await test('v1-Stand lädt (Migration) auch mit der kürzeren Feldliste von inde
   assert.equal(v1.qty, '3');
 });
 
-await test('index.html: Mail ist hervorgehoben und steht nach PDF, Backend-Blöcke fehlen', async () => {
+await test('index.html: Mail ist hervorgehoben und steht nach PDF, Backend-Blöcke fehlen, E-Mail-Feld ist Pflicht', async () => {
   const order = await page.$$eval('header .stack button', els => els.map(el => el.id));
   assert.ok(order.indexOf('btnPdf') < order.indexOf('btnMail'), 'PDF steht vor Mail');
   assert.equal(await page.getAttribute('#btnPdf', 'class'), 'sm');
   assert.match(await page.getAttribute('#btnMail', 'class'), /primary/);
   for (const id of ['calcBaseBody', 'orderDataBody', 'ordersBody', 'modal'])
     assert.equal(await page.$(`#${id}`), null, `#${id} sollte auf index.html nicht existieren`);
+  assert.equal(await page.getAttribute('#customerEmail', 'type'), 'email');
+  assert.notEqual(await page.getAttribute('#customerEmail', 'required'), null);
 });
 
-await test('backend.html: Kalkulationsbasis/Auftragsdaten/Aufträge sind vorhanden', async () => {
+await test('backend.html: Kalkulationsbasis/Auftragsdaten/Aufträge sind vorhanden, E-Mail-Feld ist Pflicht', async () => {
   for (const id of ['calcBaseBody', 'orderDataBody', 'ordersBody'])
     assert.notEqual(await pageB.$(`#${id}`), null, `#${id} sollte im Backend existieren`);
+  assert.equal(await pageB.getAttribute('#customerEmail', 'type'), 'email');
+  assert.notEqual(await pageB.getAttribute('#customerEmail', 'required'), null);
 });
 
 await test('Darstellung-Toggle merkt sich die Wahl über einen Reload', async () => {
