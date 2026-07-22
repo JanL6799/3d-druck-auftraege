@@ -257,14 +257,6 @@
         <div><label for="qty">Stückzahl</label><input id="qty" type="number" min="1" step="1" value="1"></div>
         <div><label for="scale">Skalierung %</label><input id="scale" type="number" min="10" max="500" step="1" value="100"></div>
       </div>
-
-      <label for="slicerTime">Druckzeit laut Slicer (optional)</label>
-      <input id="slicerTime" placeholder="z. B. 4:30 (h:mm) oder 270 (Minuten) — leer = eigene Schätzung">
-      <p class="hint" style="text-align:left;margin-top:6px">
-        Übersteuert die eingebaute Schätzung pro Stück — Maschinen- und Stromkosten rechnen dann
-        mit der echten Zeit aus dem Slicer.
-      </p>
-
     </div>
   </div>
 
@@ -309,6 +301,16 @@
 
   </div>
 </div>
+
+<div class="wrap" style="grid-template-columns:1fr;padding-top:0">
+  <div class="card">
+    <h3>Notizen</h3>
+    <p class="sub">Sonderwünsche oder Hinweise zu deiner Anfrage — geht mit an mich, wenn du „Per Mail senden“ nutzt.</p>
+    <label for="notes">Kommentar</label>
+    <textarea id="notes" placeholder="z. B. Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
+  </div>
+</div>
+
 <div class="foot"><a href="impressum.html" style="color:inherit">Impressum</a></div>
 
 <div id="print"></div>
@@ -648,17 +650,8 @@ function analyse(tris){
 }
 
 /* ---------- Kalkulation ---------- */
-// "4:30" -> 4,5 h · "270" oder "270 min" -> 4,5 h · "1,5h" -> 1,5 h · leer/Unsinn -> null
-function parseSlicerTime(s){
-  s = (s||"").trim().toLowerCase().replace(",",".");
-  if (!s) return null;
-  let m;
-  if ((m = s.match(/^(\d+):([0-5]?\d)$/)))            return +m[1] + +m[2]/60;
-  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*h$/)))         return +m[1];
-  if ((m = s.match(/^(\d+(?:\.\d+)?)(?:\s*min)?$/)))  return +m[1]/60;
-  return null;
-}
-
+// Die Slicer-Zeit-Übersteuerung gibt es hier bewusst nicht — nur im Backend, wo Jan sie
+// zur Hand hat. Die öffentliche Seite rechnet immer mit der eingebauten Schätzung.
 function calc(){
   if (!mesh) return null;
   const mat = color;
@@ -678,9 +671,7 @@ function calc(){
   const dens  = +mat.dens  || 1.24;
   const speed = +mat.speed || 1;
   const grams = solid * dens / 1000;
-  const est     = (solid / (FLOW * speed * (layer/0.2))) / 3600 * 1.25;
-  const slicerH = parseSlicerTime($("slicerTime").value);
-  const hours   = slicerH ?? est;
+  const hours   = (solid / (FLOW * speed * (layer/0.2))) / 3600 * 1.25;
 
   const cMat  = grams/1000 * (+mat.price||0);
   const cElec = CALCBASE.pWatt/1000 * hours * CALCBASE.pKwh;
@@ -693,7 +684,7 @@ function calc(){
   const gross   = netQty * (1 + vat/100);
 
   return {vol,grams,hours,size,cMat:cMat*qty,cElec:cElec*qty,cMach:cMach*qty,cSet:cSet*qty,
-          gross,qty,vat,mat,infill,layer,walls,slicer:slicerH!==null};
+          gross,qty,vat,mat,infill,layer,walls};
 }
 
 function render(){
@@ -706,7 +697,7 @@ function render(){
   const per = r.qty>1 ? " × "+r.qty : "";
   set("rVol",  num(r.vol/1000,1)+" cm³");
   set("rMass", num(r.grams,1)+" g"+per);
-  set("rTime", (h?h+" h ":"")+m+" min"+per+(r.slicer?" · Slicer":""));
+  set("rTime", (h?h+" h ":"")+m+" min"+per);
   set("rDim",  r.size.map(v=>num(v,0)).join(" × ")+" mm");
   set("rMat",  eur(r.cMat));
   set("lElec", "Strom ("+num(CALCBASE.pWatt,0)+" W · "+num(CALCBASE.pKwh,2)+" €/kWh)");
@@ -915,16 +906,17 @@ function drawSwatches(){
 /* ---------- Eingaben ---------- */
 $("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
 $("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
-["walls","qty","scale","slicerTime"].forEach(id => $(id).addEventListener("input", render));
+["walls","qty","scale"].forEach(id => $(id).addEventListener("input", render));
 
 /* ---------- Speichern / Laden ---------- */
-// Kalkulationsbasis (pWatt…bz) und Auftragsdaten (platform…notes) gehören nur noch zum
-// Backend (backend.html) — hier gibt es keine Eingabefelder mehr dafür, also auch nichts,
-// was "Stand speichern/laden" für diese Felder sichern könnte.
+// Kalkulationsbasis (pWatt…bz) und die restlichen Auftragsdaten (platform/orderId/buyer/due)
+// gehören nur noch zum Backend (backend.html) — hier gibt es keine Eingabefelder mehr dafür,
+// also auch nichts, was "Stand speichern/laden" für diese Felder sichern könnte. Die Slicer-
+// Zeit-Übersteuerung gibt es auf dieser Seite ebenfalls nicht mehr, nur im Backend.
 // ABSICHTLICH ohne "customerEmail": die Kontakt-Mail-Adresse darf nirgends gespeichert werden
 // (weder im JSON-Download noch im STORE_KEY-Autoload) — sie geht nur direkt beim Mailversand
 // als replyTo mit. Beim Erweitern dieser Liste customerEmail NICHT ergänzen.
-const FIELDS = ["infill","layer","walls","qty","scale","slicerTime"];
+const FIELDS = ["infill","layer","walls","qty","scale","notes"];
 
 function snapshot(){
   const d = { v:2, saved:new Date().toISOString(), color, fields:{} };
@@ -1029,7 +1021,7 @@ $("btnPdf").onclick = () => {
           ${row("Schichthöhe", num(r.layer,2)+" mm")}
           ${row("Wandlinien", r.walls)}
           ${row("Materialbedarf", num(r.grams,1)+" g / Stück")}
-          ${row("Druckzeit", ((h?h+" h ":"")+m+" min")+" / Stück"+(r.slicer?" · laut Slicer":""))}
+          ${row("Druckzeit", ((h?h+" h ":"")+m+" min")+" / Stück")}
         </table>
       </div>
       <div>
@@ -1126,7 +1118,7 @@ $("btnMail").onclick = async () => {
     `Farbe: ${color.n} (${color.c.toUpperCase()})`,
     `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
     `Materialbedarf: ${num(r.grams,1)} g / Stück`,
-    `Druckzeit: ${(h?h+" h ":"")+m+" min"}${r.slicer?" · laut Slicer":""} / Stück`,
+    `Druckzeit: ${(h?h+" h ":"")+m+" min"} / Stück`,
     "",
     `Preis: ${eur(r.gross)}`,
     r.qty>1 ? `(${eur(r.gross/r.qty)} pro Stück)` : "",

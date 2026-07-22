@@ -33,12 +33,14 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
   wasserdichten Meshes und bei Teilen, die den eingestellten Bauraum sprengen
   (90°-Drehung wird berücksichtigt).
 - **Kalkulation:** Material, Strom, Maschinenzeit, Rüsten, Marge, MwSt. — steht direkt
-  oben im Blick, keine Plattformgebühr. Die Druckzeit-Schätzung lässt sich durch die
-  echte Slicer-Zeit übersteuern.
+  oben im Blick, keine Plattformgebühr. Die Druckzeit-Schätzung lässt sich im Backend durch
+  die echte Slicer-Zeit übersteuern.
 - **Material & Farbe:** nur die 90 offiziellen Bambu-Lab-Farben (PLA Basic/Matte/CF/
   Translucent/Pure, PETG Basic/CF), gruppiert nach Linie mit Preis pro kg — die
   Farbwahl legt Material (Preis, Dichte, Tempo) und Farbe in einem Schritt fest, es
   lässt sich nichts drucken, was nicht auch gekauft werden kann.
+- **Notizen:** freies Kommentarfeld ganz unten auf der öffentlichen Seite, für
+  Sonderwünsche — geht mit an mich, wenn per Mail angefragt wird.
 - **Aufträge (nur im Backend):** CSV-Import der Bestellexporte von eBay/Etsy/Amazon,
   Auftragsliste mit Status/Suche/Filter, Frist-Countdown zum Sortieren nach Dringlichkeit,
   Duplizieren für Wiederholungskäufe, Komplett-Backup als JSON, Umsatz-CSV für die Buchhaltung.
@@ -52,7 +54,7 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
 
 Details zu Rechenmodell, Grenzen und Entscheidungen: [`NOTIZEN.md`](NOTIZEN.md).
 
-28 Ende-zu-Ende-Tests fahren beide Seiten headless durch: Volumenberechnung (STL + 3MF,
+30 Ende-zu-Ende-Tests fahren beide Seiten headless durch: Volumenberechnung (STL + 3MF,
 auch mit ausgelagerter Geometrie), Wasserdichtheits- und Bauraum-Warnung, CSV-Import,
 Auftragsliste, Frist-Countdown/-Sortierung, Backup, Migration, Darstellungs-Umschalter,
 Mail-Versand inkl. Kontakt-E-Mail-Pflichtfeld. Sie laufen bei jedem Push automatisch über
