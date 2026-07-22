@@ -323,6 +323,17 @@
   <!-- RECHTS -->
   <div>
     <div class="card">
+      <h3>Kontakt</h3>
+      <p class="sub">Damit ich mich bei dir melden kann.</p>
+      <label for="customerEmail">Deine E-Mail-Adresse</label>
+      <input id="customerEmail" type="email" placeholder="du@beispiel.de" autocomplete="off" required>
+      <p class="hint" style="text-align:left;margin-top:6px">
+        Pflichtfeld für „Per Mail senden“ — ich antworte direkt an diese Adresse. Wird nicht im
+        Browser gespeichert, auch nicht über „Stand speichern“.
+      </p>
+    </div>
+
+    <div class="card">
       <h3>Kalkulation</h3>
       <p class="sub">Live aus Modell, Material und Einstellungen.</p>
       <table class="calc">
@@ -346,16 +357,6 @@
       <p class="sub">Nur Bambu-Lab-Farben — die Wahl legt Material und Farbe zusammen fest.</p>
       <div id="paletteGroups"></div>
       <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
-    </div>
-
-    <div class="card">
-      <h3>Kontakt</h3>
-      <p class="sub">Damit ich mich bei dir melden kann.</p>
-      <label for="customerEmail">Deine E-Mail-Adresse</label>
-      <input id="customerEmail" type="email" placeholder="du@beispiel.de" required>
-      <p class="hint" style="text-align:left;margin-top:6px">
-        Pflichtfeld für „Per Mail senden“ — ich antworte direkt an diese Adresse.
-      </p>
     </div>
 
     <div class="card">
@@ -1103,6 +1104,10 @@ $("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+"
  "slicerTime"].forEach(id => $(id).addEventListener("input", render));
 
 /* ---------- Speichern / Laden ---------- */
+// ABSICHTLICH ohne "customerEmail": die Kontakt-Mail-Adresse darf nirgends gespeichert werden
+// (weder im JSON-Download noch im STORE_KEY-Autoload noch im Auftrags-Snapshot) — sie geht nur
+// direkt beim Mailversand als replyTo mit. Beim Erweitern dieser Liste customerEmail NICHT
+// ergänzen.
 const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","walls","qty","scale",
                 "pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
 

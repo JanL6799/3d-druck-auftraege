@@ -52,7 +52,7 @@ damit der Kopf der Seite aufgeräumt bleibt.
 
 Details zu Rechenmodell, Grenzen und Entscheidungen: [`NOTIZEN.md`](NOTIZEN.md).
 
-26 Ende-zu-Ende-Tests fahren beide Seiten headless durch: Volumenberechnung (STL + 3MF,
+28 Ende-zu-Ende-Tests fahren beide Seiten headless durch: Volumenberechnung (STL + 3MF,
 auch mit ausgelagerter Geometrie), Wasserdichtheits- und Bauraum-Warnung, CSV-Import,
 Auftragsliste, Frist-Countdown/-Sortierung, Backup, Migration, Darstellungs-Umschalter,
 Mail-Versand inkl. Kontakt-E-Mail-Pflichtfeld. Sie laufen bei jedem Push automatisch über

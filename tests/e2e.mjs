@@ -351,6 +351,23 @@ await test('Mail-Button warnt ohne gültige Kunden-E-Mail', async () => {
   assert.match(await text('#warn'), /gültige E-Mail-Adresse/);
 });
 
+async function assertEmailNeverPersisted(pg){
+  await pg.fill('#customerEmail', 'geheim@beispiel.de');
+  await pg.click('#btnSave');
+  const saved = await pg.evaluate(() => localStorage.getItem('druckauftrag.v2'));
+  assert.ok(saved && !saved.includes('geheim@beispiel.de'),
+    '"Stand speichern" darf die Kontakt-E-Mail nicht in localStorage ablegen');
+  const snap = await pg.evaluate(() => JSON.stringify(snapshot()));
+  assert.ok(!snap.includes('geheim@beispiel.de'),
+    'snapshot() darf die Kontakt-E-Mail nicht enthalten (FIELDS schließt customerEmail bewusst aus)');
+}
+await test('index.html: Kontakt-E-Mail wird nie gespeichert, auch nicht über "Stand speichern"', async () => {
+  await assertEmailNeverPersisted(page);
+});
+await test('backend.html: Kontakt-E-Mail wird nie gespeichert, auch nicht über "Stand speichern"', async () => {
+  await assertEmailNeverPersisted(pageB);
+});
+
 await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang, Kunden-Mail als reply_to', async () => {
   await page.fill('#customerEmail', 'kunde@beispiel.de');
   const call = await page.evaluate(async () => {

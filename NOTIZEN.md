@@ -17,13 +17,14 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 
 | Datei | Zweck |
 |---|---|
-| `index.html` | Öffentliche Seite: Modell, Kalkulation, Material, PDF, Mail — keine Auftragsverwaltung |
-| `backend.html` | Internes Backend: zusätzlich Kalkulationsbasis, Auftragsdaten, Aufträge (Suche/Filter/CSV-Import/Backup) |
+| `index.html` | Öffentliche Seite: Modell, Kalkulation, Material, Kontakt, PDF, Mail — keine Auftragsverwaltung |
+| `backend.html` | Internes Backend: zusätzlich Kalkulationsbasis, Auftragsdaten, Aufträge (Suche/Filter/Frist-Sortierung/CSV-Import/Backup) |
+| `impressum.html` | Impressum nach § 5 TMG **und** Datenschutzerklärung nach DSGVO (seit der Kontakt-E-Mail-Erhebung nötig) |
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup, Mail-Versand, Kalkulationsbasis), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 24 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 28 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -160,11 +161,19 @@ verbindet, läuft über den API-Server auf dem Pi (`server/api-server.js`, `/api
 - **PDF/Mail auf index.html ohne Auftragsdaten:** Beide Funktionen laufen unverändert, zeigen
   für Plattform/Bestellnummer/Käufer/Liefern-bis/Notizen aber leer bzw. „–", weil es dafür kein
   Eingabefeld mehr gibt (`g()`-Helfer in beiden Handlern ist jetzt Null-sicher).
-- **Kontakt-E-Mail:** Pflichtfeld auf beiden Seiten (`#customerEmail`, einfache Regex-Prüfung
-  client- und serverseitig). Geht als `replyTo` an `/api/send-mail`, der Server reicht sie als
-  `reply_to` an Resend weiter — eine normale Antwort im Mailprogramm geht damit direkt an den
-  Kunden, nicht an die Resend-Testabsenderadresse. Steht zusätzlich als Klartextzeile
-  („Kontakt: …") im Mailtext, falls jemand die Mail ohne Antwortfunktion weiterverarbeitet.
+- **Kontakt-E-Mail:** Pflichtfeld auf beiden Seiten, erste Karte in der rechten Spalte (bewusst
+  ganz oben, direkt neben der Modell-Karte sichtbar — nicht erst nach dem Scrollen). `#customerEmail`,
+  einfache Regex-Prüfung client- und serverseitig, `autocomplete="off"` gegen Browser-Autofill.
+  Geht als `replyTo` an `/api/send-mail`, der Server reicht sie als `reply_to` an Resend weiter —
+  eine normale Antwort im Mailprogramm geht damit direkt an den Kunden, nicht an die
+  Resend-Testabsenderadresse. Steht zusätzlich als Klartextzeile („Kontakt: …") im Mailtext,
+  falls jemand die Mail ohne Antwortfunktion weiterverarbeitet.
+- **Kontakt-E-Mail wird nirgends gespeichert.** Bewusst nicht Teil von `FIELDS` (mit Kommentar
+  im Code markiert, damit sie dort nicht versehentlich ergänzt wird) — landet deshalb weder im
+  `STORE_KEY`-Autoload noch im JSON-Download von „Stand speichern" noch in einem
+  Auftrags-Snapshot. Einzige Verwendung ist der direkte Mailversand. Durch `tests/e2e.mjs`
+  regressionsgesichert (füllt die Adresse, klickt „Stand speichern", prüft `localStorage` und
+  `snapshot()` explizit auf Abwesenheit).
 - **Frist-Countdown (nur Backend):** `dueDays()`/`dueLabel()` errechnen aus dem
   „Liefern bis"-Feld die Resttage und zeigen sie als kleine Badge neben dem Status
   (grau = mehr als 2 Tage, amber = ≤ 2 Tage/heute fällig, rot = überfällig). Zwei Sortierchips
@@ -258,7 +267,7 @@ Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, B
 
 ## Verifiziert
 
-Die früheren Ad-hoc-Prüfungen sind jetzt **26 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
+Die früheren Ad-hoc-Prüfungen sind jetzt **28 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
 die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Läuft gegen zwei parallele
 Playwright-Pages: `page` (index.html) für alles Öffentliche, `pageB` (backend.html) für
 Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
@@ -281,6 +290,8 @@ Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
   überfällig → bald fällig → weit entfernt → ohne Termin — auf `pageB`.
 - Farbwahl legt das Material (und damit den Materialpreis) für die Kalkulation fest.
 - Mail-Button warnt ohne gültige Kunden-E-Mail (leer oder falsches Format).
+- Kontakt-E-Mail landet nach „Stand speichern" weder in `localStorage` noch in `snapshot()` —
+  auf beiden Seiten einzeln geprüft.
 - Mail-Versand: „Per Mail senden“ schickt Auftrag inkl. echtem STL- und Stand-JSON-Anhang an
   `/api/send-mail`, mit der Kunden-E-Mail als `replyTo` im Payload und als „Kontakt: …“-Zeile
   im Mailtext; ohne geladenes Modell erscheint stattdessen eine Warnung. Mailtext enthält
@@ -317,6 +328,24 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Zwölfte Runde (22. Juli 2026):
+
+1. **Kontakt-Karte nach oben verschoben** — jetzt erste Karte der rechten Spalte auf beiden
+   Seiten, direkt neben der Modell-Karte sichtbar statt erst nach dem Scrollen.
+2. **Impressum um eine Datenschutzerklärung nach DSGVO ergänzt** (`impressum.html`):
+   Verantwortlicher, welche Daten verarbeitet werden, Zweck/Rechtsgrundlage (Art. 6 Abs. 1
+   lit. b DSGVO), Resend als Auftragsverarbeiter (USA-Übermittlung), Speicherdauer, kein
+   Tracking/Cookies, Hinweis auf Server-Logs, Betroffenenrechte. Nötig geworden, weil seit der
+   elften Runde erstmals eine E-Mail-Adresse erhoben wird. **Kein Ersatz für eine echte
+   Rechtsberatung** — Standardformulierungen auf Basis der tatsächlichen Datenflüsse im Code,
+   vor Live-Betrieb idealerweise gegenprüfen lassen, insbesondere ob mit Resend ein
+   Auftragsverarbeitungsvertrag (AVV) besteht.
+3. **Kontakt-E-Mail explizit gegen jede Speicherung abgesichert:** `autocomplete="off"` gegen
+   Browser-Autofill, Code-Kommentar an `FIELDS` markiert die Auslassung als beabsichtigt, zwei
+   neue Tests prüfen nach „Stand speichern", dass die Adresse weder in `localStorage` noch in
+   `snapshot()` auftaucht. War technisch schon vorher korrekt (nicht Teil von `FIELDS`), jetzt
+   zusätzlich hart abgesichert und dokumentiert.
 
 Elfte Runde (22. Juli 2026):
 
@@ -473,7 +502,8 @@ Zweite Runde:
    Header kennt, könnte die öffentlich erreichbare `POST`-Route theoretisch fluten oder mit
    Unsinnswerten überschreiben — niedriges Risiko (nur Kalkulationsbasis, kein Zugriff auf
    Aufträge/Kundendaten), aber kein Schutz dagegen eingebaut.
-6. **Heimnetz-Beschränkung von `backend.html` ist noch nicht auf dem Pi ausgeführt worden** —
-   `deploy/setup-backend-lokal.sh` liegt bereit, muss aber noch einmal per `sudo bash` laufen
-   (siehe „Deployment"). Bis dahin ist `backend.html` weiterhin unter der alten öffentlichen
-   Adresse erreichbar, falls es dort schon einmal kopiert wurde.
+6. **Datenschutzerklärung sollte vor echtem Live-Betrieb mit relevanten Bestellzahlen von
+   jemand Fachkundigem gegengelesen werden** — insbesondere ob mit Resend ein
+   Auftragsverarbeitungsvertrag (AVV) besteht bzw. abgeschlossen werden sollte. Die Formulierung
+   in `impressum.html` ist ein guter-Glaube-Standardtext auf Basis der tatsächlichen
+   Datenflüsse im Code, keine Rechtsberatung.
