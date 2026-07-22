@@ -19,11 +19,11 @@ Extras fehlen dann.
 
 ## Ablauf
 
-STL oder 3MF laden → Bambu-Lab-Farbe wählen (legt Material gleich mit fest) → Preis
-steht sofort oben, ganz ohne Scrollen. Fertig geht es raus als PDF oder direkt per Mail mit
-Anhang — beides in der Kopfzeile, „Per Mail senden“ ist hervorgehoben. Im Backend stecken
-Aufträge, Auftragsdaten und die Kalkulationsbasis zusätzlich bei Bedarf hinter einem Pfeil,
-damit der Kopf der Seite aufgeräumt bleibt.
+STL oder 3MF laden, eigene E-Mail-Adresse eintragen (Kontakt-Karte steht ganz oben), Bambu-Lab-
+Farbe wählen (legt Material gleich mit fest) → Preis steht sofort daneben, ganz ohne Scrollen.
+Fertig geht es raus als PDF oder direkt per Mail mit Anhang — beides in der Kopfzeile, „Per Mail
+senden“ ist hervorgehoben. Im Backend stecken Aufträge, Auftragsdaten und die Kalkulationsbasis
+zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt bleibt.
 
 ## Funktionen
 
