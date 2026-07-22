@@ -193,6 +193,11 @@
   .st-gedruckt{background:rgba(10,132,255,.16);color:#0a84ff}
   .st-versendet{background:rgba(255,159,10,.18);color:#c97b06}
   .st-bezahlt{background:rgba(48,209,88,.18);color:#28a04c}
+  /* Frist-Countdown neben dem Status — reine Anzeige, kein Knopf */
+  span.stbadge{cursor:default}
+  .due-ok{background:rgba(142,142,147,.14);color:#8e8e93}
+  .due-soon{background:rgba(255,159,10,.18);color:#c97b06}
+  .due-over{background:rgba(255,59,48,.16);color:#d70015}
 
   /* Modal */
   .modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.4);
@@ -344,6 +349,16 @@
     </div>
 
     <div class="card">
+      <h3>Kontakt</h3>
+      <p class="sub">Damit ich mich bei dir melden kann.</p>
+      <label for="customerEmail">Deine E-Mail-Adresse</label>
+      <input id="customerEmail" type="email" placeholder="du@beispiel.de" required>
+      <p class="hint" style="text-align:left;margin-top:6px">
+        Pflichtfeld für „Per Mail senden“ — ich antworte direkt an diese Adresse.
+      </p>
+    </div>
+
+    <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
         <div>
           <h3 style="margin:0">Kalkulationsbasis</h3>
@@ -426,6 +441,7 @@
       <div class="obar">
         <input id="oSearch" placeholder="Suchen: Bestellnummer, Käufer, Plattform …">
       </div>
+      <div class="fchips" id="oSortChips"></div>
       <div class="fchips" id="oChips"></div>
       <div id="orderList"></div>
       <div class="stack" style="margin-top:14px">
@@ -504,16 +520,16 @@ const NOZZLE = 0.4, FLOW = 8.0;
 const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
 const MESHES_KEY = "druckauftrag.meshes.v1";
-// Teilt die Kalkulationsbasis mit index.html (öffentliche Kundenseite ohne eigenes
-// Eingabefeld dafür) über denselben Origin. index.html liest nur, hier wird geschrieben.
-const CALCBASE_KEY = "druckauftrag.calcbase.v1";
 const ORDER_STATUS = ["offen","gedruckt","versendet","bezahlt"];
-// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js): Auftragsliste sichern
-// und Auftrags-Mail mit echtem Anhang verschicken. X-Backup-Secret ist kein echtes Geheimnis
-// — steht im öffentlichen Quelltext dieser Seite — sondern nur eine Hürde gegen zufälliges
-// Abgreifen durch Bots.
+// Server-seitiger API-Dienst auf dem Pi (siehe server/api-server.js): Auftragsliste sichern,
+// Auftrags-Mail mit echtem Anhang verschicken, Kalkulationsbasis mit index.html teilen (siehe
+// saveCalcBase() weiter unten — läuft über den Server, nicht über localStorage, weil
+// backend.html und index.html unterschiedliche Origins sind). X-Backup-Secret ist kein
+// echtes Geheimnis — steht im öffentlichen Quelltext dieser Seite — sondern nur eine Hürde
+// gegen zufälliges Abgreifen durch Bots.
 const BACKUP_URL = "/api/backup";
 const MAIL_API_URL = "/api/send-mail";
+const CALCBASE_API_URL = "/api/calcbase";
 const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
 
 /* ---------- Zustand ---------- */
@@ -828,12 +844,20 @@ function calc(){
           gross,qty,vat,mat,infill,layer,walls,slicer:slicerH!==null};
 }
 
-// Schreibt die aktuelle Kalkulationsbasis nach jedem render() in den geteilten Storage-Key,
-// damit die öffentliche index.html (ohne eigenes Eingabefeld dafür) sie live mitbekommt.
+// Schreibt die aktuelle Kalkulationsbasis nach jedem render() zum API-Server auf dem Pi,
+// damit die öffentliche index.html (anderer Origin, ohne eigenes Eingabefeld dafür) sie
+// mitbekommt. Fire-and-forget wie backupOrders() — schlägt lautlos fehl, wenn kein
+// API-Server erreichbar ist (z. B. lokal per Doppelklick geöffnet).
 function saveCalcBase(){
   const d = {};
   ["pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz"].forEach(id => d[id] = +$(id).value || 0);
-  try { localStorage.setItem(CALCBASE_KEY, JSON.stringify(d)); } catch(e){ /* Privatmodus o. Ä. */ }
+  try {
+    fetch(CALCBASE_API_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
+      body: JSON.stringify(d)
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 function render(){
@@ -1265,11 +1289,20 @@ function meshToSTLBlob(tris, sourceName){
   return new Blob([buf], {type:"model/stl"});
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 $("btnMail").onclick = async () => {
   const r = calc();
   if (!r){ const w=$("warn"); w.className="warnbox show";
            w.textContent="Bitte zuerst eine STL- oder 3MF-Datei laden — ohne Modell gibt es keine Kalkulation.";
            return; }
+  const customerEmail = $("customerEmail").value.trim();
+  if (!EMAIL_RE.test(customerEmail)){
+    const w=$("warn"); w.className="warnbox show";
+    w.textContent="Bitte eine gültige E-Mail-Adresse eintragen — nur so kann ich mich bei dir melden.";
+    $("customerEmail").focus();
+    return;
+  }
   const g = id => $(id).value.trim();
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
 
@@ -1280,8 +1313,10 @@ $("btnMail").onclick = async () => {
   const stand = snapshot();
   delete stand.mesh; delete stand.meshHash;
   stand.meshFile = stlName;
+  stand.customerEmail = customerEmail;
 
   const lines = [
+    `Kontakt: ${customerEmail}`,
     `Material: ${r.mat.line||"–"} · ${eur(+r.mat.price||0)}/kg`,
     `Farbe: ${color.n} (${color.c.toUpperCase()})`,
     `Abmessungen: ${r.size.map(v=>num(v,1)).join(" × ")} mm`,
@@ -1306,7 +1341,7 @@ $("btnMail").onclick = async () => {
     const res = await fetch(MAIL_API_URL, {
       method: "POST",
       headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
-      body: JSON.stringify({ subject, text: lines,
+      body: JSON.stringify({ subject, text: lines, replyTo: customerEmail,
         attachments: [ {filename:stlName, content:stlContent}, {filename:standName, content:standContent} ] })
     });
     const data = await res.json().catch(() => ({}));
@@ -1325,7 +1360,29 @@ $("btnMail").onclick = async () => {
 /* ---------- Auftragsliste ---------- */
 let orders = [];
 let currentOrderId = null;
-let orderFilter = "alle", orderQuery = "";
+let orderFilter = "alle", orderQuery = "", orderSort = "neu";
+
+// Tage bis "Liefern bis" (negativ = überfällig), null wenn kein Termin gesetzt ist. Datumsfeld
+// ist YYYY-MM-DD ohne Uhrzeit — Vergleich deshalb auf Kalendertage, nicht auf volle 24h-Blöcke.
+function dueDays(o){
+  const d = o.snapshot && o.snapshot.fields && o.snapshot.fields.due;
+  if (!d) return null;
+  const due = new Date(d + "T00:00:00");
+  if (isNaN(due)) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((due - today) / 86400000);
+}
+// Unsichtbar für Kunden (die Auftragsliste existiert nur hier im Backend) — dient nur dazu,
+// Aufträge nach Dringlichkeit statt nach Speicherdatum sortieren zu können.
+function dueLabel(days){
+  if (days === null) return null;
+  if (days > 2)  return { text: `noch ${days} Tage`, cls: "due-ok" };
+  if (days === 2) return { text: "noch 2 Tage", cls: "due-soon" };
+  if (days === 1) return { text: "noch 1 Tag", cls: "due-soon" };
+  if (days === 0) return { text: "heute fällig", cls: "due-soon" };
+  if (days === -1) return { text: "1 Tag überfällig", cls: "due-over" };
+  return { text: `${Math.abs(days)} Tage überfällig`, cls: "due-over" };
+}
 
 function loadOrders(){
   try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY)) || []; } catch(e){ orders = []; }
@@ -1386,8 +1443,19 @@ function drawChips(){
   });
 }
 
+function drawSortChips(){
+  const opts = [["neu","Neueste zuerst"],["frist","Frist zuerst"]];
+  $("oSortChips").innerHTML = opts.map(([v,label]) =>
+    `<button class="fchip${orderSort===v?" on":""}" data-sort="${v}">${label}</button>`
+  ).join("");
+  $("oSortChips").querySelectorAll(".fchip").forEach(b => b.onclick = () => {
+    orderSort = b.dataset.sort; drawOrders();
+  });
+}
+
 function drawOrders(){
   drawChips();
+  drawSortChips();
   const box = $("orderList");
   if (!orders.length){
     box.innerHTML = `<div class="oempty">Noch keine Aufträge gesichert.<br>„Sichern“ legt den aktuellen Stand ab, „CSV importieren“ holt Bestellungen aus eBay, Etsy oder Amazon.</div>`;
@@ -1396,7 +1464,17 @@ function drawOrders(){
   const q = orderQuery.trim().toLowerCase();
   const match = o => (orderFilter === "alle" || (o.status||"offen") === orderFilter)
     && (!q || [o.orderId, o.buyer, o.platform].some(v => (v||"").toLowerCase().includes(q)));
-  const sorted = orders.filter(match).sort((a,b) => (b.saved||"").localeCompare(a.saved||""));
+  // "Frist zuerst": kleinste (auch negative = überfällige) Resttage zuerst, ohne Termin ans
+  // Ende. "Neueste zuerst" (Standard) bleibt wie bisher nach Speicherdatum.
+  const sortFns = {
+    neu: (a,b) => (b.saved||"").localeCompare(a.saved||""),
+    frist: (a,b) => {
+      const da = dueDays(a), db = dueDays(b);
+      const ra = da === null ? Infinity : da, rb = db === null ? Infinity : db;
+      return ra !== rb ? ra - rb : (b.saved||"").localeCompare(a.saved||"");
+    },
+  };
+  const sorted = orders.filter(match).sort(sortFns[orderSort] || sortFns.neu);
   if (!sorted.length){
     box.innerHTML = `<div class="oempty">Kein Auftrag passt zu Filter oder Suche.</div>`;
     return;
@@ -1405,12 +1483,14 @@ function drawOrders(){
     const d = o.saved ? new Date(o.saved).toLocaleDateString("de-DE") : "";
     const sub = [o.platform, (o.buyer||"").trim(), d].filter(Boolean).join(" · ");
     const st = o.status || "offen";
+    const dl = dueLabel(dueDays(o));
     return `<div class="oitem${o.id===currentOrderId?" active":""}" data-id="${esc(o.id)}">
       <div class="oi-main">
         <div class="oi-t">${esc(orderTitle(o))}</div>
         <div class="oi-s">${esc(sub) || "—"}</div>
       </div>
       <button class="stbadge st-${st}" data-st="${esc(o.id)}" title="Status weiterschalten">${st}</button>
+      ${dl ? `<span class="stbadge ${dl.cls}" title="Liefertermin">${dl.text}</span>` : ""}
       <div class="oi-p">${o.priceText ? esc(o.priceText) : ""}</div>
       <button class="del" data-dup="${esc(o.id)}" title="Duplizieren" style="font-size:15px">⧉</button>
       <button class="del" data-del="${esc(o.id)}" title="Löschen">&times;</button>

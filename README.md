@@ -8,10 +8,12 @@ Anhang) brauchen zusätzlich den kleinen API-Server aus `server/`, siehe
 Extras fehlen dann.
 
 - **`index.html`** — die öffentliche Seite: Modell hochladen, Preis sehen, Material wählen,
-  als PDF exportieren oder direkt per Mail anfragen. Kennt keine Auftragsverwaltung.
+  Kontakt-E-Mail eintragen, als PDF exportieren oder direkt per Mail anfragen. Kennt keine
+  Auftragsverwaltung.
 - **`backend.html`** — Jans eigenes Werkzeug, identisch zu index.html plus Kalkulationsbasis,
-  Auftragsdaten und die komplette Auftragsliste. Öffnet er selbst, wenn eine Anfrage
-  reingekommen ist.
+  Auftragsdaten und die komplette Auftragsliste (inkl. Frist-Countdown zum Sortieren). Öffnet
+  er selbst, wenn eine Anfrage reingekommen ist — nur im Heimnetz erreichbar, nicht über die
+  öffentliche Domain.
 
 ![Screenshot: Modellvorschau und Live-Kalkulation](docs/screenshot.png)
 
@@ -38,17 +40,20 @@ damit der Kopf der Seite aufgeräumt bleibt.
   Farbwahl legt Material (Preis, Dichte, Tempo) und Farbe in einem Schritt fest, es
   lässt sich nichts drucken, was nicht auch gekauft werden kann.
 - **Aufträge (nur im Backend):** CSV-Import der Bestellexporte von eBay/Etsy/Amazon,
-  Auftragsliste mit Status/Suche/Filter, Duplizieren für Wiederholungskäufe,
-  Komplett-Backup als JSON, Umsatz-CSV für die Buchhaltung.
+  Auftragsliste mit Status/Suche/Filter, Frist-Countdown zum Sortieren nach Dringlichkeit,
+  Duplizieren für Wiederholungskäufe, Komplett-Backup als JSON, Umsatz-CSV für die Buchhaltung.
 - **PDF & Mail:** einseitiges A4-Auftragsblatt über den Druckdialog, oder direkter
   Mail-Versand mit echtem Anhang (Modell als STL, aktueller Stand als JSON) über den
-  API-Server auf dem Pi (Resend-API) — kein manuelles Anhängen mehr nötig.
+  API-Server auf dem Pi (Resend-API) — kein manuelles Anhängen mehr nötig. Die eingetragene
+  Kontakt-E-Mail geht als Antwortadresse mit, eine normale Antwort im Mailprogramm erreicht
+  damit direkt den Kunden.
 - **Darstellung:** folgt automatisch dem System, manueller Hell/Dunkel-Umschalter im
   Header überschreibt das bei Bedarf.
 
 Details zu Rechenmodell, Grenzen und Entscheidungen: [`NOTIZEN.md`](NOTIZEN.md).
 
-24 Ende-zu-Ende-Tests fahren beide Seiten headless durch: Volumenberechnung (STL + 3MF,
+26 Ende-zu-Ende-Tests fahren beide Seiten headless durch: Volumenberechnung (STL + 3MF,
 auch mit ausgelagerter Geometrie), Wasserdichtheits- und Bauraum-Warnung, CSV-Import,
-Auftragsliste, Backup, Migration, Darstellungs-Umschalter, Mail-Versand. Sie laufen
-bei jedem Push automatisch über GitHub Actions.
+Auftragsliste, Frist-Countdown/-Sortierung, Backup, Migration, Darstellungs-Umschalter,
+Mail-Versand inkl. Kontakt-E-Mail-Pflichtfeld. Sie laufen bei jedem Push automatisch über
+GitHub Actions.

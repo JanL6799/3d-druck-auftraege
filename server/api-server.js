@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 "use strict";
 // Kleiner Node-Dienst ohne Abhängigkeiten (nur Node-Bordmittel, inkl. dem seit Node 18
-// eingebauten fetch), der zwei Dinge für die App erledigt, die eine rein statische Seite
+// eingebauten fetch), der Dinge für die App erledigt, die eine rein statische Seite
 // technisch nicht selbst kann:
 //   POST /backup     — aktuelle Auftragsliste lokal auf dem Pi sichern
 //   POST /send-mail  — Auftrags-Mail inkl. echtem Dateianhang über die Resend-API verschicken
+//   GET  /calcbase   — aktuelle Kalkulationsbasis auslesen
+//   POST /calcbase   — Kalkulationsbasis aktualisieren
 // Läuft ausschließlich auf 127.0.0.1 — von außen nur über den nginx-Reverse-Proxy erreichbar.
+// /calcbase existiert, weil index.html (öffentlich, drucken.luetje.me) und backend.html
+// (nur im Heimnetz, eigener Port, siehe deploy/setup-backend-lokal.sh) unterschiedliche
+// Origins sind und sich deshalb keinen localStorage mehr teilen können — dieser kleine
+// Dateispeicher auf dem Pi übernimmt die Rolle, die vorher der gemeinsame localStorage hatte.
 // X-Backup-Secret ist kein echtes Geheimnis (steht im Client-Quelltext), sondern nur eine
 // Hürde gegen zufälliges Abgreifen durch Bots, die die Domain sonst finden.
 const http = require("http");
@@ -62,18 +68,25 @@ async function handleSendMail(req, res){
   try { payload = JSON.parse(body); }
   catch { res.writeHead(400); res.end("Ungültiges JSON"); return; }
 
-  const { subject, text, attachments } = payload;
+  const { subject, text, attachments, replyTo } = payload;
   if (!subject || !text || !Array.isArray(attachments)){
     res.writeHead(400, {"Content-Type":"application/json"});
     res.end(JSON.stringify({ok:false, error:"subject, text und attachments sind Pflichtfelder."}));
     return;
   }
 
+  // reply_to trägt die Kunden-Adresse, damit eine normale Antwort im Mailprogramm direkt an
+  // den Kunden geht statt an die Absenderadresse (Resend-Testdomain). Client validiert das
+  // Format schon, hier trotzdem serverseitig geprüft statt ungeprüft an Resend durchgereicht.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const mailPayload = { from: MAIL_FROM, to:[MAIL_TO], subject, text, attachments };
+  if (typeof replyTo === "string" && EMAIL_RE.test(replyTo)) mailPayload.reply_to = replyTo;
+
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization":"Bearer "+RESEND_API_KEY, "Content-Type":"application/json" },
-      body: JSON.stringify({ from: MAIL_FROM, to:[MAIL_TO], subject, text, attachments })
+      body: JSON.stringify(mailPayload)
     });
     const data = await r.json();
     if (!r.ok){
@@ -89,20 +102,43 @@ async function handleSendMail(req, res){
   }
 }
 
+const CALCBASE_FILE = path.join(DIR, "calcbase.json");
+
+async function handleGetCalcbase(req, res){
+  let data = {};
+  try { data = JSON.parse(fs.readFileSync(CALCBASE_FILE, "utf8")); } catch (e) { /* noch nie gespeichert */ }
+  res.writeHead(200, {"Content-Type":"application/json"});
+  res.end(JSON.stringify(data));
+}
+async function handlePostCalcbase(req, res){
+  const body = await readBody(req, 4096); // winzige Zahlenliste, 4 KB reichen dick
+  let data;
+  try { data = JSON.parse(body); }
+  catch { res.writeHead(400); res.end("Ungültiges JSON"); return; }
+  fs.writeFileSync(CALCBASE_FILE, JSON.stringify(data));
+  res.writeHead(200, {"Content-Type":"application/json"});
+  res.end(JSON.stringify({ok:true}));
+}
+
+const ROUTES = {
+  "POST /backup":     handleBackup,
+  "POST /send-mail":  handleSendMail,
+  "GET /calcbase":    handleGetCalcbase,
+  "POST /calcbase":   handlePostCalcbase,
+};
+
 const server = http.createServer((req, res) => {
-  if (req.method !== "POST" || (req.url !== "/backup" && req.url !== "/send-mail")){
-    res.writeHead(404); res.end(); return;
-  }
+  const handler = ROUTES[req.method + " " + req.url];
+  if (!handler){ res.writeHead(404); res.end(); return; }
   if (SECRET && req.headers["x-backup-secret"] !== SECRET){
     res.writeHead(403); res.end(); return;
   }
 
-  const handler = req.url === "/backup" ? handleBackup : handleSendMail;
   handler(req, res).catch(e => {
     res.writeHead(e.code === 413 ? 413 : 500); res.end();
   });
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log("API-Server läuft auf 127.0.0.1:"+PORT+" (/backup, /send-mail), Ablage: "+DIR);
+  console.log("API-Server läuft auf 127.0.0.1:"+PORT+" (/backup, /send-mail, /calcbase), Ablage: "+DIR);
 });
