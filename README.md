@@ -8,8 +8,8 @@ Anhang) brauchen zusätzlich den kleinen API-Server aus `server/`, siehe
 Extras fehlen dann.
 
 - **`index.html`** — die öffentliche Seite: Modell hochladen, Preis sehen, Material wählen,
-  Kontakt-E-Mail eintragen, als PDF exportieren oder direkt per Mail anfragen. Kennt keine
-  Auftragsverwaltung.
+  Kontakt-E-Mail und Notizen eintragen, als PDF exportieren oder direkt per Mail anfragen.
+  Kennt keine Auftragsverwaltung.
 - **`backend.html`** — Jans eigenes Werkzeug, identisch zu index.html plus Kalkulationsbasis,
   Auftragsdaten und die komplette Auftragsliste (inkl. Frist-Countdown zum Sortieren). Öffnet
   er selbst, wenn eine Anfrage reingekommen ist — nur im Heimnetz erreichbar, nicht über die

@@ -17,14 +17,14 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 
 | Datei | Zweck |
 |---|---|
-| `index.html` | Öffentliche Seite: Modell, Kalkulation, Material, Kontakt, PDF, Mail — keine Auftragsverwaltung |
-| `backend.html` | Internes Backend: zusätzlich Kalkulationsbasis, Auftragsdaten, Aufträge (Suche/Filter/Frist-Sortierung/CSV-Import/Backup) |
+| `index.html` | Öffentliche Seite: Modell, Kalkulation, Material, Kontakt, Notizen, PDF, Mail — keine Auftragsverwaltung |
+| `backend.html` | Internes Backend: zusätzlich Kalkulationsbasis, Auftragsdaten, Aufträge (Suche/Filter/Frist-Sortierung/CSV-Import/Backup), Slicer-Zeit-Übersteuerung |
 | `impressum.html` | Impressum nach § 5 TMG **und** Datenschutzerklärung nach DSGVO (seit der Kontakt-E-Mail-Erhebung nötig) |
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup, Mail-Versand, Kalkulationsbasis), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 28 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 30 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -323,8 +323,9 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
 ## Grenzen des Modells
 
 1. **Die Druckzeit-Schätzung bleibt eine Durchsatz-Näherung, kein Slicing.** Sie kennt weder
-   Beschleunigungswerte noch reale Stützgeometrie. Wer es genau braucht, trägt die Slicer-Zeit
-   ins Übersteuerungsfeld ein — dann rechnen Maschinen- und Stromkosten exakt.
+   Beschleunigungswerte noch reale Stützgeometrie. Im Backend lässt sich die echte Slicer-Zeit
+   ins Übersteuerungsfeld eintragen — dann rechnen Maschinen- und Stromkosten exakt. Auf der
+   öffentlichen Seite gibt es dieses Feld nicht, dort zählt immer die Schätzung.
 2. **Der Datei-Export („Stand speichern“) bettet die Geometrie weiterhin ein** — gewollt, damit
    die JSON-Datei in sich vollständig ist. Nur die Auftragsliste dedupliziert über den
    Mesh-Speicher. Sehr große Modelle können den `localStorage`-Autosave weiterhin sprengen
