@@ -343,6 +343,24 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
 
 ## Erledigt
 
+Vierzehnte Runde (24. Juli 2026):
+
+1. **Notizen-Karte in die rechte Spalte verschoben**, direkt unter „Kontakt" statt als eigene
+   volle-Breite-Karte ganz unten. Reine DOM-Verschiebung, Feld-ID `notes` unverändert.
+2. **iOS-Zoom-Bug behoben:** `input,select,textarea` liefen mit `font-size:15px` — unter 16px
+   zoomt Safari beim Fokussieren automatisch rein. Auf 16px angehoben.
+3. **`.row`/`.row3` brechen unter 480px auf eine Spalte um** — vorher wurde z. B. der
+   Wandstärke-Select ("3 Linien · 1,2 mm") auf iPhone-Breite (390px) auf drei Spalten gepresst
+   und der Text dadurch abgeschnitten. Mit Playwright im iPhone-13-Viewport verifiziert.
+4. **Modell online suchen (Thingiverse) versucht, dann wieder verworfen.** Server-Proxy
+   (`/model-search`, `/model-files`, `/model-download`) und Such-Karte in index.html gebaut und
+   mit Playwright durchgetestet, aber die App-Registrierung bei Thingiverse (nötig für den
+   `THINGIVERSE_APP_TOKEN`) verlangt mehr Angaben zum Projekt, als das wert war — Feature komplett
+   zurückgebaut, kein toter Code übrig. MyMiniFactory und Printables waren aus anderen Gründen
+   ohnehin schon ausgeschlossen (MMF: Datei-Download nur mit OAuth-Nutzerkonto, nicht mit
+   API-Key; Printables: keine offizielle API, nur ein reverse-engineerter Endpoint). Damit bleibt
+   die Modellsuche bei Bedarf ein Thema für später, aktuell lädt man Dateien nur per Drag&Drop.
+
 Dreizehnte Runde (22. Juli 2026):
 
 1. **Slicer-Zeit-Übersteuerung aus index.html entfernt**, existiert nur noch im Backend.

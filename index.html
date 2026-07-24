@@ -79,7 +79,7 @@
   label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:16px 0 6px;
         letter-spacing:0}
   input,select,textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:12px;
-        background:var(--panel2);color:var(--text);font:inherit;font-size:15px;transition:.15s;
+        background:var(--panel2);color:var(--text);font:inherit;font-size:16px;transition:.15s;
         letter-spacing:-.01em}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
         box-shadow:0 0 0 4px var(--accent-soft)}
@@ -88,6 +88,7 @@
          background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  @media(max-width:480px){ .row,.row3{grid-template-columns:1fr} }
 
   button{font:inherit;font-size:15px;font-weight:500;padding:9px 17px;border-radius:100px;
          border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;
@@ -274,6 +275,13 @@
     </div>
 
     <div class="card">
+      <h3>Notizen</h3>
+      <p class="sub">Sonderwünsche oder Hinweise zu deiner Anfrage — geht mit an mich, wenn du „Per Mail senden“ nutzt.</p>
+      <label for="notes">Kommentar</label>
+      <textarea id="notes" placeholder="z. B. Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
+    </div>
+
+    <div class="card">
       <h3>Kalkulation</h3>
       <p class="sub">Live aus Modell, Material und Einstellungen.</p>
       <table class="calc">
@@ -299,15 +307,6 @@
       <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
     </div>
 
-  </div>
-</div>
-
-<div class="wrap" style="grid-template-columns:1fr;padding-top:0">
-  <div class="card">
-    <h3>Notizen</h3>
-    <p class="sub">Sonderwünsche oder Hinweise zu deiner Anfrage — geht mit an mich, wenn du „Per Mail senden“ nutzt.</p>
-    <label for="notes">Kommentar</label>
-    <textarea id="notes" placeholder="z. B. Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
   </div>
 </div>
 
