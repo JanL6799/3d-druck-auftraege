@@ -369,7 +369,29 @@ Vierzehnte Runde (24. Juli 2026):
    verschlucktem Fehler: ein toter n8n darf einen erfolgreich verschickten Auftrag nie zu
    einem Fehler für den Kunden machen. Leeres `N8N_ORDER_HOOK` schaltet den Push ab.
    Ende-zu-Ende getestet am 24. Juli 2026: Mail mit STL+JSON-Anhang kam an, auch über die App.
-   Im Workflow steht der Pushover-User-Key noch als Platzhalter und muss in n8n gesetzt werden.
+   Pushover-User-Key in n8n eingetragen, Push-Test am 24. Juli 2026 erfolgreich angekommen.
+   Im Export bleibt der Key ein Platzhalter — er gehört nicht ins öffentliche Repo.
+7. **Eingangsbestätigung an den Kunden:** derselbe Workflow schickt parallel zum Push eine
+   automatische Antwort per Resend (HTTP-Request-Node) an die `replyTo`-Adresse. Ein IF-Node
+   davor überspringt den Versand, wenn keine Adresse mitkam; der Node läuft mit
+   `onError: continueRegularOutput`, damit ein Fehlschlag den Push nicht mitreißt.
+   Der Text sagt bewusst zu, dass noch nichts bestellt ist und keine Kosten entstehen —
+   die Bestätigung ist eine Eingangsmeldung, keine Auftragsannahme.
+   Zwischen IF und Mail sitzt ein Wait-Node (30 s), damit die Bestätigung nicht in derselben
+   Sekunde wie die Anfrage im Postfach liegt.
+   **Offen — Absender ist noch die Resend-Testdomain `onboarding@resend.dev`.** Getestet am
+   24. Juli 2026, Mail kam an, aber nur weil sie an die eigene Konto-Adresse ging: über die
+   Testdomain stellt Resend ausschließlich an den Kontoinhaber zu, echte Kunden bekommen
+   nichts. Weder `luetje.me` noch `drucken.luetje.me` sind bei Resend verifiziert (beide
+   liefern 403 `domain is not verified`) — die Auftragsmail an Jan lief immer schon über die
+   Testdomain, siehe `MAIL_FROM`-Default in `server/api-server.js`. Für den Produktivbetrieb:
+   Domain bei Resend mit DKIM/SPF verifizieren, dann `from` im Workflow auf
+   `auftrag@luetje.me` umstellen.
+   **Import in n8n:** der Workflow liegt in der n8n-SQLite-DB, nicht als Datei — Änderungen
+   kommen per `docker cp` + `n8n import:workflow --input=…` rein, danach
+   `n8n update:workflow --id=… --active=true` und Container-Neustart. Vorher den Live-Stand
+   aus der DB exportieren und die neuen Nodes daran anhängen, nicht diesen Export drüberbügeln:
+   der echte Pushover-User-Key und die Credential-IDs stehen nur in der DB.
 
 Dreizehnte Runde (22. Juli 2026):
 
