@@ -50,6 +50,7 @@ Environment=BACKUP_SECRET=$CURRENT_SECRET
 Environment=BACKUP_DIR=$CURRENT_DIR
 Environment=RESEND_API_KEY=$RESEND_API_KEY
 Environment=MAIL_TO=jan@luetje.me
+Environment=N8N_ORDER_HOOK=http://127.0.0.1:5678/webhook/new-order
 Restart=on-failure
 User=jan
 

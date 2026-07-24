@@ -22,6 +22,7 @@ const PORT            = process.env.BACKUP_PORT    || 8181;
 const SECRET          = process.env.BACKUP_SECRET  || "";
 const DIR             = process.env.BACKUP_DIR     || "/var/backups/druckauftrag";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY || "";
+const N8N_ORDER_HOOK  = process.env.N8N_ORDER_HOOK || ""; // n8n-Webhook für neue-Bestellung-Push, leer = aus
 const MAIL_FROM       = process.env.MAIL_FROM      || "3D-Druck Auftragserfassung <onboarding@resend.dev>";
 const MAIL_TO         = process.env.MAIL_TO        || "jan@luetje.me";
 const MAX_BODY_BACKUP = 25 * 1024 * 1024; // 25 MB genügt für eine Auftragsliste bei weitem
@@ -93,6 +94,15 @@ async function handleSendMail(req, res){
       res.writeHead(502, {"Content-Type":"application/json"});
       res.end(JSON.stringify({ok:false, error: data.message || "Resend hat die Mail abgelehnt."}));
       return;
+    }
+    // Fire-and-forget: n8n über die neue Bestellung informieren. Fehler hier dürfen den
+    // erfolgreichen Mailversand nie umwerfen, daher .catch(()=>{}) und kein await.
+    if (N8N_ORDER_HOOK){
+      fetch(N8N_ORDER_HOOK, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ subject, text, replyTo: replyTo || "" })
+      }).catch(()=>{});
     }
     res.writeHead(200, {"Content-Type":"application/json"});
     res.end(JSON.stringify({ok:true, id:data.id}));

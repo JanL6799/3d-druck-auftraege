@@ -1,0 +1,41 @@
+{
+  "name": "3D-Druck: Neue Bestellung → Pushover",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-order",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-new-order",
+      "name": "Neue Bestellung (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [260, 300],
+      "webhookId": "new-order"
+    },
+    {
+      "parameters": {
+        "userId": "DEINE_PUSHOVER_USER_KEY",
+        "message": "={{ $json.body.text }}\n\nAntwort an: {{ $json.body.replyTo || 'keine Adresse' }}",
+        "additionalFields": {
+          "title": "={{ $json.body.subject }}",
+          "priority": 0,
+          "sound": "pushover"
+        }
+      },
+      "id": "pushover-send",
+      "name": "Pushover-Push an Jan",
+      "type": "n8n-nodes-base.pushover",
+      "typeVersion": 1,
+      "position": [560, 300]
+    }
+  ],
+  "connections": {
+    "Neue Bestellung (Webhook)": {
+      "main": [[{ "node": "Pushover-Push an Jan", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

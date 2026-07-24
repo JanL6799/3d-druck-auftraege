@@ -39,8 +39,8 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
   Translucent/Pure, PETG Basic/CF), gruppiert nach Linie mit Preis pro kg — die
   Farbwahl legt Material (Preis, Dichte, Tempo) und Farbe in einem Schritt fest, es
   lässt sich nichts drucken, was nicht auch gekauft werden kann.
-- **Notizen:** freies Kommentarfeld ganz unten auf der öffentlichen Seite, für
-  Sonderwünsche — geht mit an mich, wenn per Mail angefragt wird.
+- **Notizen:** freies Kommentarfeld direkt unter der Kontakt-Karte auf der öffentlichen
+  Seite, für Sonderwünsche — geht mit an mich, wenn per Mail angefragt wird.
 - **Aufträge (nur im Backend):** CSV-Import der Bestellexporte von eBay/Etsy/Amazon,
   Auftragsliste mit Status/Suche/Filter, Frist-Countdown zum Sortieren nach Dringlichkeit,
   Duplizieren für Wiederholungskäufe, Komplett-Backup als JSON, Umsatz-CSV für die Buchhaltung.
@@ -50,7 +50,8 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
   Kontakt-E-Mail geht als Antwortadresse mit, eine normale Antwort im Mailprogramm erreicht
   damit direkt den Kunden.
 - **Darstellung:** folgt automatisch dem System, manueller Hell/Dunkel-Umschalter im
-  Header überschreibt das bei Bedarf.
+  Header überschreibt das bei Bedarf. Layout ist auf iPhone-Breite geprüft (kein
+  Safari-Autozoom in Eingabefeldern, Formularreihen brechen auf eine Spalte um).
 
 Details zu Rechenmodell, Grenzen und Entscheidungen: [`NOTIZEN.md`](NOTIZEN.md).
 

@@ -360,6 +360,16 @@ Vierzehnte Runde (24. Juli 2026):
    ohnehin schon ausgeschlossen (MMF: Datei-Download nur mit OAuth-Nutzerkonto, nicht mit
    API-Key; Printables: keine offizielle API, nur ein reverse-engineerter Endpoint). Damit bleibt
    die Modellsuche bei Bedarf ein Thema für später, aktuell lädt man Dateien nur per Drag&Drop.
+5. **Deployed:** Commit f9b90b6 gepusht, `index.html` per `sudo cp` ins Live-Webroot
+   (`/var/www/drucken.luetje.me/index.html`) kopiert — kein Server-Neustart nötig, da sich nur
+   die statische Seite geändert hat (server/api-server.js ist durch den Revert unverändert).
+6. **Push bei neuer Bestellung über n8n:** nach erfolgreichem Resend-Versand feuert
+   `/send-mail` zusätzlich fire-and-forget gegen `N8N_ORDER_HOOK` (Workflow-Export unter
+   `n8n/workflow-1-neue-bestellung.json`, Webhook → Pushover). Bewusst ohne `await` und mit
+   verschlucktem Fehler: ein toter n8n darf einen erfolgreich verschickten Auftrag nie zu
+   einem Fehler für den Kunden machen. Leeres `N8N_ORDER_HOOK` schaltet den Push ab.
+   Ende-zu-Ende getestet am 24. Juli 2026: Mail mit STL+JSON-Anhang kam an, auch über die App.
+   Im Workflow steht der Pushover-User-Key noch als Platzhalter und muss in n8n gesetzt werden.
 
 Dreizehnte Runde (22. Juli 2026):
 
