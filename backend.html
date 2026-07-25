@@ -86,6 +86,9 @@
   textarea{resize:vertical;min-height:76px}
   select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e6e73' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
          background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
+  .check{display:flex;align-items:center;gap:9px;margin:16px 0 0;font-size:14px;
+        font-weight:400;color:var(--text);cursor:pointer}
+  .check input{width:auto;flex:none;accent-color:var(--accent)}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 
@@ -331,6 +334,7 @@
         Pflichtfeld für „Per Mail senden“ — ich antworte direkt an diese Adresse. Wird nicht im
         Browser gespeichert, auch nicht über „Stand speichern“.
       </p>
+      <label class="check" for="ship"><input id="ship" type="checkbox"> Versand gewünscht (+4,99 €)</label>
     </div>
 
     <div class="card">
@@ -347,6 +351,7 @@
         <tr><td id="lElec">Strom</td><td id="rElec">–</td></tr>
         <tr><td>Maschinenzeit</td><td id="rMach">–</td></tr>
         <tr><td>Rüsten &amp; Nacharbeit</td><td id="rSetup">–</td></tr>
+        <tr><td>Versand</td><td id="rShip">–</td></tr>
         <tr class="total"><td>Preis brutto</td><td id="rTotal">–</td></tr>
       </table>
       <div class="hint" id="rPer" style="text-align:right"></div>
@@ -518,6 +523,9 @@ const PALETTE = PALETTE_LINES.flatMap(g =>
   g.colors.map(([n,c]) => ({n, c, line:g.line, price:g.price, dens:g.dens, speed:g.speed})));
 
 const NOZZLE = 0.4, FLOW = 8.0;
+// Versandpauschale, einmal pro Auftrag (nicht pro Stück) und als Endbetrag auf den Bruttopreis.
+// Muss mit index.html übereinstimmen, sonst weicht der Preis eines geladenen Kunden-Stands ab.
+const SHIPPING = 4.99;
 const STORE_KEY = "druckauftrag.v2";
 const ORDERS_KEY = "druckauftrag.orders.v1";
 const MESHES_KEY = "druckauftrag.meshes.v1";
@@ -839,10 +847,11 @@ function calc(){
 
   const netQty  = net1 * qty;
   const vat     = +$("pVat").value||0;
-  const gross   = netQty * (1 + vat/100);
+  const ship    = $("ship").checked ? SHIPPING : 0;
+  const gross   = netQty * (1 + vat/100) + ship;
 
   return {vol,grams,hours,size,cMat:cMat*qty,cElec:cElec*qty,cMach:cMach*qty,cSet:cSet*qty,
-          gross,qty,vat,mat,infill,layer,walls,slicer:slicerH!==null};
+          ship,gross,qty,vat,mat,infill,layer,walls,slicer:slicerH!==null};
 }
 
 // Schreibt die aktuelle Kalkulationsbasis nach jedem render() zum API-Server auf dem Pi,
@@ -865,7 +874,7 @@ function render(){
   saveCalcBase();
   const r = calc();
   const set = (id,v) => $(id).textContent = v;
-  const ids = ["rVol","rMass","rTime","rDim","rMat","rElec","rMach","rSetup","rTotal"];
+  const ids = ["rVol","rMass","rTime","rDim","rMat","rElec","rMach","rSetup","rShip","rTotal"];
   if (!r){ ids.forEach(i=>set(i,"–")); $("rPer").textContent=""; return; }
 
   const h = Math.floor(r.hours), m = Math.round((r.hours-h)*60);
@@ -879,8 +888,10 @@ function render(){
   set("rElec", eur(r.cElec));
   set("rMach", eur(r.cMach));
   set("rSetup",eur(r.cSet));
+  set("rShip", r.ship ? eur(r.ship) : "Abholung");
   set("rTotal",eur(r.gross));
-  $("rPer").textContent = (r.qty>1 ? eur(r.gross/r.qty)+" pro Stück · " : "")
+  // Stückpreis ohne Versand — die Pauschale fällt einmal pro Auftrag an, nicht je Stück.
+  $("rPer").textContent = (r.qty>1 ? eur((r.gross-r.ship)/r.qty)+" pro Stück · " : "")
                         + "inkl. "+num(r.vat,0)+" % MwSt.";
 
   // Bauraum frei konfigurierbar; ein Drehen um 90° in der XY-Ebene darf das Teil passend machen,
@@ -1100,7 +1111,7 @@ function drawSwatches(){
 /* ---------- Eingaben ---------- */
 $("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
 $("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
-["walls","qty","scale","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz",
+["walls","qty","scale","ship","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz",
  "slicerTime"].forEach(id => $(id).addEventListener("input", render));
 
 /* ---------- Speichern / Laden ---------- */
@@ -1112,7 +1123,7 @@ const FIELDS = ["platform","orderId","buyer","due","notes","infill","layer","wal
                 "pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz","slicerTime"];
 
 function snapshot(embedMesh = true){
-  const d = { v:2, saved:new Date().toISOString(), color, fields:{} };
+  const d = { v:2, saved:new Date().toISOString(), color, ship:$("ship").checked, fields:{} };
   FIELDS.forEach(f => d.fields[f] = $(f).value);
   if (mesh){
     const packed = () => ({ name:mesh.name, bytes:mesh.bytes,
@@ -1172,6 +1183,7 @@ function applyState(d){
   if (d.v === 1) d = migrateV1(d);
   else if (d.v !== 2) throw new Error("Dieser Stand stammt aus einer neueren Version (v"+d.v+"). Bitte die Anwendung aktualisieren.");
   FIELDS.forEach(f => { if (d.fields && d.fields[f] !== undefined) $(f).value = d.fields[f]; });
+  $("ship").checked = !!d.ship;
   if (d.color && d.color.c) color = d.color;
 
   let mdata = d.mesh;
@@ -1240,10 +1252,11 @@ $("btnPdf").onclick = () => {
           ${row("Strom ("+num(+g("pWatt")||0,0)+" W · "+num(+g("pKwh")||0,2)+" €/kWh)", eur(r.cElec))}
           ${row("Maschinenzeit", eur(r.cMach))}
           ${row("Rüsten &amp; Nacharbeit", eur(r.cSet))}
+          ${row("Versand", r.ship ? eur(r.ship) : "Abholung")}
           ${row("MwSt. "+num(r.vat,0)+" %", eur(r.gross - r.gross/(1+r.vat/100)))}
         </table>
         <div class="tot">Gesamt ${eur(r.gross)}</div>
-        ${r.qty>1 ? `<div style="font-size:11px;color:#666">${eur(r.gross/r.qty)} pro Stück</div>` : ""}
+        ${r.qty>1 ? `<div style="font-size:11px;color:#666">${eur((r.gross-r.ship)/r.qty)} pro Stück</div>` : ""}
       </div>
     </div>
     ${g("notes") ? `<h4>Notizen</h4><div>${esc(g("notes")).replace(/\n/g,"<br>")}</div>` : ""}
@@ -1328,8 +1341,9 @@ $("btnMail").onclick = async () => {
     `Materialbedarf: ${num(r.grams,1)} g / Stück`,
     `Druckzeit: ${(h?h+" h ":"")+m+" min"}${r.slicer?" · laut Slicer":""} / Stück`,
     "",
+    `Versand: ${r.ship ? eur(r.ship)+" (Versand gewünscht)" : "nein, Abholung"}`,
     `Preis: ${eur(r.gross)}`,
-    r.qty>1 ? `(${eur(r.gross/r.qty)} pro Stück)` : "",
+    r.qty>1 ? `(${eur((r.gross-r.ship)/r.qty)} pro Stück${r.ship ? " + Versand" : ""})` : "",
     "",
     g("notes") ? `Notizen: ${g("notes")}` : ""
   ].filter(l => l !== "").join("\n");

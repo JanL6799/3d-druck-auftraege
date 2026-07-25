@@ -24,7 +24,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 30 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 31 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -260,8 +260,12 @@ Schale  = min(Volumen, Oberfläche × Wandlinien × 0,4 mm)
 Solid   = Schale + (Volumen − Schale) × Füllung
 Gramm   = Solid × Dichte / 1000
 Stunden = Solid / (8 mm³/s × Tempo × (Schichthöhe / 0,2)) / 3600 × 1,25
-Preis   = ((Material + Strom + Maschine) × (1 + Marge) + Rüsten) × Stück × (1 + MwSt.)
+Preis   = ((Material + Strom + Maschine) × (1 + Marge) + Rüsten) × Stück × (1 + MwSt.) + Versand
 ```
+
+Versand ist eine feste Pauschale von **4,99 €** (`SHIPPING`), nur mit gesetztem Haken „Versand
+gewünscht" im Kontakt-Block, und fällt **einmal pro Auftrag** an — nicht je Stück, deshalb steht
+sie außerhalb der `× Stück`-Klammer und wird aus allen „pro Stück"-Angaben herausgerechnet.
 
 Strom ist eine eigene Position: **Leistung (W) × Druckzeit × €/kWh**. Startwerte 120 W und
 0,27 €/kWh (Jans Tarif). Wichtig: In „Maschine €/h“ gehören nur Abschreibung, Düsen und Wartung —
@@ -277,7 +281,7 @@ Weitere Startwerte: Maschine 1 €/h, Rüsten 1,50 €, Marge 15 %, MwSt. 0 %, B
 
 ## Verifiziert
 
-Die früheren Ad-hoc-Prüfungen sind jetzt **30 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
+Die früheren Ad-hoc-Prüfungen sind jetzt **31 eingecheckte Playwright-Tests** (`tests/e2e.mjs`),
 die bei jedem Push per GitHub Actions laufen (`npm test` lokal). Läuft gegen zwei parallele
 Playwright-Pages: `page` (index.html) für alles Öffentliche, `pageB` (backend.html) für
 Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
@@ -300,6 +304,8 @@ Kalkulationsbasis/Auftragsdaten/Aufträge. Abgedeckt:
 - Frist-Countdown zeigt „X Tage überfällig"/„noch X Tage" korrekt und „Frist zuerst" sortiert
   überfällig → bald fällig → weit entfernt → ohne Termin — auf `pageB`.
 - Farbwahl legt das Material (und damit den Materialpreis) für die Kalkulation fest.
+- Versand-Haken: +4,99 € einmalig (auch bei Stückzahl 2), Stückpreis ohne Versand, Haken
+  überlebt den Stand-Rundlauf, `SHIPPING` auf beiden Seiten identisch.
 - Mail-Button warnt ohne gültige Kunden-E-Mail (leer oder falsches Format).
 - Kontakt-E-Mail landet nach „Stand speichern" weder in `localStorage` noch in `snapshot()` —
   auf beiden Seiten einzeln geprüft; der Notizen-Kommentar dagegen **wird** gesichert (bewusster
@@ -342,6 +348,22 @@ doppelte Kosten), Speichern/Laden-Rundlauf identisch, PDF-Summe deckt sich mit d
    Einfügefeld für manuelles Nacharbeiten.
 
 ## Erledigt
+
+Fünfzehnte Runde (25. Juli 2026):
+
+1. **Versand-Haken im Kontakt-Block** (`#ship`) auf beiden Seiten, direkt unter dem E-Mail-Feld:
+   „Versand gewünscht (+4,99 €)". Bewusst **ohne Adressfeld** — die Lieferadresse klärt Jan per
+   Mail, die Seite speichert sie nirgends. Die Pauschale (`SHIPPING = 4.99`, in beiden Dateien
+   gleich) kommt als Endbetrag auf den Bruttopreis, einmal pro Auftrag statt je Stück; die
+   „pro Stück"-Angaben in Kalkulation, PDF und Mail rechnen sie deshalb heraus. Kalkulation und
+   PDF zeigen eine eigene Zeile „Versand" (`Abholung`, wenn kein Haken), der Mailtext eine
+   Zeile „Versand: …", die über den n8n-Workflow ungeändert in Push und Eingangsbestätigung
+   landet. Der Haken hängt im Stand-JSON (`d.ship`, nicht in `FIELDS` — das trägt nur
+   `.value`-Felder) und überlebt damit Speichern/Laden und den Auftrags-Snapshot im Backend.
+2. **Test dazu** (`npm test`, 31/31 grün): Haken erhöht den Preis um exakt 4,99 € bei Stückzahl
+   2, Stückpreis bleibt ohne Versand, Haken kommt aus dem Stand zurück, und `SHIPPING` ist auf
+   index.html und backend.html identisch — sonst würde ein geladener Kunden-Stand im Backend
+   einen anderen Preis ergeben als der Kunde gesehen hat.
 
 Vierzehnte Runde (24. Juli 2026):
 

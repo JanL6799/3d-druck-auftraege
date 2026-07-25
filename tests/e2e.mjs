@@ -348,6 +348,31 @@ await test('Farbwahl legt Material für die Kalkulation fest', async () => {
   assert.notEqual(cMatAfter, cMatBefore);
 });
 
+await test('Versand-Haken schlägt 4,99 € einmalig auf, nicht je Stück, und überlebt den Stand', async () => {
+  await loadStl(boxSTL(20,20,20), 'cube.stl');
+  await page.fill('#qty', '2');
+  const ohne = await page.evaluate(() => calc().gross);
+  await page.check('#ship');
+  const mit = await page.evaluate(() => calc());
+  assert.equal(Math.round((mit.gross - ohne) * 100), 499, 'Versand kostet 4,99 € — einmal, nicht je Stück');
+  assert.match(await text('#rShip'), /^4,99/);   // eur() setzt ein schmales NBSP vor das €
+  const proStueck = await page.evaluate(() => eur((calc().gross - calc().ship) / calc().qty));
+  assert.ok((await text('#rPer')).startsWith(proStueck), 'Stückpreis wird ohne Versandpauschale ausgewiesen');
+
+  const stand = await page.evaluate(() => JSON.stringify(snapshot()));
+  await page.uncheck('#ship');
+  assert.equal(await text('#rShip'), 'Abholung');
+  await page.evaluate(s => applyState(JSON.parse(s)), stand);
+  assert.equal(await page.isChecked('#ship'), true, 'Versand-Haken muss aus dem Stand zurückkommen');
+
+  // Backend rechnet mit derselben Pauschale, sonst weicht der Preis eines geladenen
+  // Kunden-Stands von dem ab, was der Kunde auf index.html gesehen hat.
+  assert.equal(await pageB.evaluate(() => SHIPPING), await page.evaluate(() => SHIPPING));
+
+  await page.uncheck('#ship');
+  await page.fill('#qty', '1');
+});
+
 await test('Mail-Button warnt ohne gültige Kunden-E-Mail', async () => {
   await page.fill('#customerEmail', '');
   await page.click('#btnMail');
@@ -407,6 +432,7 @@ await test('Mail-Button verschickt Auftrag mit echtem STL- und Stand-Anhang, Kun
   assert.match(call.body.text, /Notizen: Bitte ohne Stützen drucken\./);
   assert.match(call.body.text, /Materialbedarf/);
   assert.match(call.body.text, /Preis: /);
+  assert.match(call.body.text, /Versand: nein, Abholung/);
   assert.doesNotMatch(call.body.text, /Plattform:/);
   assert.doesNotMatch(call.body.text, /Bestellnummer:/);
   assert.doesNotMatch(call.body.text, /Käufer:/);
