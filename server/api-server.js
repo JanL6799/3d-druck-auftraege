@@ -75,6 +75,19 @@ async function handleSendMail(req, res){
     res.end(JSON.stringify({ok:false, error:"subject, text und attachments sind Pflichtfelder."}));
     return;
   }
+  // Nur filename+content (base64) durchlassen. Ohne diese Prüfung könnte ein Anhang statt
+  // "content" ein "path" mit beliebiger URL enthalten, die Resend serverseitig abruft (SSRF).
+  const attachmentsOk = attachments.every(a =>
+    a && typeof a === "object" &&
+    typeof a.filename === "string" &&
+    typeof a.content === "string" &&
+    !("path" in a)
+  );
+  if (!attachmentsOk){
+    res.writeHead(400, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"attachments: nur filename (string) und content (base64-string) erlaubt."}));
+    return;
+  }
 
   // reply_to trägt die Kunden-Adresse, damit eine normale Antwort im Mailprogramm direkt an
   // den Kunden geht statt an die Absenderadresse (Resend-Testdomain). Client validiert das
