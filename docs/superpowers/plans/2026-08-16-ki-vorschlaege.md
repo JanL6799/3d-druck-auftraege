@@ -35,7 +35,7 @@ Noch ohne Anthropic-Aufruf. Am Ende antwortet die Route mit einem festen Dummy-V
 - Consumes: nichts
 - Produces: `clampInfill(v) -> number`, `clientIp(req) -> string`, `validPalette(p) -> boolean`, `rateLimitCheck(ip, now) -> string|null` (Fehlertext oder `null` wenn erlaubt), `resetRateLimit()` für Tests
 
-- [ ] **Step 1: Test-Datei anlegen (schlägt fehl, weil nichts exportiert wird)**
+- [x] **Step 1: Test-Datei anlegen (schlägt fehl, weil nichts exportiert wird)**
 
 `tests/server.mjs`:
 
@@ -135,12 +135,12 @@ if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);
 ```
 
-- [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
+- [x] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
 
 Run: `node tests/server.mjs`
 Expected: Absturz beim `require` bzw. lauter `FAIL`, weil `api.clampInfill` undefined ist.
 
-- [ ] **Step 3: Konstanten und Hilfsfunktionen in `server/api-server.js`**
+- [x] **Step 3: Konstanten und Hilfsfunktionen in `server/api-server.js`**
 
 Zu den bestehenden Konstanten (nach `MAX_BODY_MAIL:29`) ergänzen:
 
@@ -206,7 +206,7 @@ function validPalette(p){
 }
 ```
 
-- [ ] **Step 4: Handler und Route ergänzen**
+- [x] **Step 4: Handler und Route ergänzen**
 
 ```js
 async function handleAiSuggest(req, res){
@@ -249,7 +249,7 @@ In der `ROUTES`-Tabelle (`server/api-server.js:146`) ergänzen:
   "POST /ai-suggest": handleAiSuggest,
 ```
 
-- [ ] **Step 5: Exporte für die Tests, Server nur als Hauptmodul starten**
+- [x] **Step 5: Exporte für die Tests, Server nur als Hauptmodul starten**
 
 Am Dateiende `server.listen(...)` ersetzen durch:
 
@@ -264,7 +264,7 @@ if (require.main === module){
 module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit };
 ```
 
-- [ ] **Step 6: Test-Skript erweitern**
+- [x] **Step 6: Test-Skript erweitern**
 
 `package.json`:
 
@@ -274,7 +274,7 @@ module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRat
   },
 ```
 
-- [ ] **Step 7: Tests laufen lassen**
+- [x] **Step 7: Tests laufen lassen**
 
 Run: `node tests/server.mjs`
 Expected: 13 Server-Tests, alle grün.
@@ -282,7 +282,7 @@ Expected: 13 Server-Tests, alle grün.
 Run: `npm test`
 Expected: die bestehenden 30 E2E-Tests weiterhin grün, danach die Server-Tests.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add server/api-server.js tests/server.mjs package.json
