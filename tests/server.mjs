@@ -88,6 +88,48 @@ test('clientIp fällt ohne Header auf die Socket-Adresse zurück', () => {
   assert.equal(api.clientIp(req), '127.0.0.1');
 });
 
+const PAL = [
+  { line: 'PLA Basic',  colors: ['Jade White', 'Black'] },
+  { line: 'PETG Basic', colors: ['Red', 'Black'] },
+];
+
+test('Schema listet genau die Linien aus der Palette als Enum', () => {
+  const s = api.buildSchema(PAL);
+  assert.deepEqual(s.properties.line.enum, ['PLA Basic', 'PETG Basic']);
+});
+
+test('Schema rastert Schichthöhe und Wandstärke als Enum', () => {
+  const s = api.buildSchema(PAL);
+  assert.deepEqual(s.properties.layer.enum, [0.08, 0.12, 0.16, 0.2, 0.24, 0.28, 0.32]);
+  assert.deepEqual(s.properties.walls.enum, [2, 3, 4, 5]);
+});
+
+test('Schema verlangt alle Felder und verbietet zusätzliche', () => {
+  const s = api.buildSchema(PAL);
+  assert.deepEqual(s.required, ['line','color','infill','layer','walls','notes','reason']);
+  assert.equal(s.additionalProperties, false);
+});
+
+test('System-Prompt nennt jede Linie mit ihren Farben', () => {
+  const p = api.systemPrompt(PAL);
+  assert.match(p, /PLA Basic: Jade White, Black/);
+  assert.match(p, /PETG Basic: Red, Black/);
+});
+
+test('Request-Body setzt Modell, max_tokens und das Schema', () => {
+  const b = api.buildRequestBody('Halterung fürs Fahrrad', PAL);
+  assert.equal(b.model, 'claude-opus-5');
+  assert.equal(b.max_tokens, 8000);
+  assert.equal(b.messages[0].content, 'Halterung fürs Fahrrad');
+  assert.equal(b.output_config.format.type, 'json_schema');
+  assert.deepEqual(b.output_config.format.schema.properties.line.enum, ['PLA Basic','PETG Basic']);
+});
+
+test('effort geht an Opus, aber nicht an Haiku (Haiku lehnt es mit 400 ab)', () => {
+  assert.equal(api.buildRequestBody('x', PAL, 'claude-opus-5').output_config.effort, 'low');
+  assert.equal(api.buildRequestBody('x', PAL, 'claude-haiku-4-5').output_config.effort, undefined);
+});
+
 for (const [s, n] of results) console.log(s, n);
 if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);

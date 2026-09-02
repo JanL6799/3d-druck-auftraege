@@ -198,6 +198,90 @@ function validPalette(p){
     g.colors.every(c => typeof c === "string" && c.length > 0 && c.length <= 40));
 }
 
+
+const AI_LAYERS = [0.08, 0.12, 0.16, 0.2, 0.24, 0.28, 0.32];  // Raster des Schichthöhen-Reglers
+const AI_WALLS  = [2, 3, 4, 5];                                // Optionen des Wandstärke-Felds
+
+// Structured Outputs unterstützt weder minimum/maximum noch multipleOf. Deshalb sind
+// Schichthöhe und Wandstärke als Enum modelliert; Infill wird nachträglich geklemmt.
+function buildSchema(palette){
+  return {
+    type: "object",
+    properties: {
+      line:   { type: "string",  enum: palette.map(g => g.line) },
+      color:  { type: "string" },
+      infill: { type: "integer" },
+      layer:  { type: "number",  enum: AI_LAYERS },
+      walls:  { type: "integer", enum: AI_WALLS },
+      notes:  { type: "string" },
+      reason: { type: "string" }
+    },
+    required: ["line","color","infill","layer","walls","notes","reason"],
+    additionalProperties: false
+  };
+}
+
+function systemPrompt(palette){
+  const lines = palette.map(g => `- ${g.line}: ${g.colors.join(", ")}`).join("\n");
+  return [
+    "Du berätst Kunden einer kleinen 3D-Druckerei. Der Kunde beschreibt sein Vorhaben in Alltagssprache.",
+    "Wähle daraus Material, Farbe und Druckeinstellungen.",
+    "",
+    "Materialkunde:",
+    "- PLA Basic und PLA Matte: günstig, für Deko und Teile im Innenraum. Werden in praller Sonne und im Auto weich.",
+    "- PETG Basic: witterungs- und UV-fest, wärmebeständiger. Für alles, was nach draußen soll.",
+    "- PLA-CF und PETG-CF: steif und formstabil, für mechanisch belastete Teile. Teurer als die Basic-Linien.",
+    "- PLA Translucent und PLA Pure: reine Optikmaterialien.",
+    "",
+    "Richtwerte: Infill 15 bis 20 Prozent für Deko, 30 bis 50 Prozent für belastete Teile.",
+    "Schichthöhe 0.28 bis 0.32 wenn es schnell gehen soll, 0.12 bis 0.16 für sichtbare Details, sonst 0.2.",
+    "Wandstärke 2 für Deko, 3 als Normalfall, 4 bis 5 für belastete Teile.",
+    "",
+    "Verfügbare Materialien und Farben. Wähle color exakt aus der Liste der gewählten Linie:",
+    lines,
+    "",
+    "notes: ein kurzer Hinweis für den Drucker, oder leerer String wenn nichts anzumerken ist.",
+    "reason: ein bis zwei Sätze auf Deutsch, für Laien verständlich, warum diese Wahl passt.",
+    "Wenn du ein teureres Material als PLA Basic vorschlägst, nenne in reason ausdrücklich den Grund."
+  ].join("\n");
+}
+
+function buildRequestBody(description, palette, model = ANTHROPIC_MODEL){
+  const body = {
+    model,
+    // Opus 5 denkt standardmäßig adaptiv mit; max_tokens deckelt Denken UND Antwort.
+    // Großzügig bemessen, weil nur tatsächlich erzeugte Token abgerechnet werden — ein
+    // knapper Wert schneidet dagegen die Antwort mitten im JSON ab.
+    max_tokens: 8000,
+    system: systemPrompt(palette),
+    messages: [{ role: "user", content: description }],
+    output_config: { format: { type: "json_schema", schema: buildSchema(palette) } }
+  };
+  // Haiku 4.5 lehnt output_config.effort mit 400 ab. Das Modell ist per Env-Var
+  // umschaltbar, also darf das Feld nicht bedingungslos mitgehen.
+  if (!/haiku/i.test(model)) body.output_config.effort = "low";
+  return body;
+}
+
+async function callAnthropic(body){
+  for (let attempt = 0; attempt < 2; attempt++){
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    if (r.ok) return r.json();
+    // 429 = Rate-Limit, 529 = überlastet. Alles andere ist ein echter Fehler, den ein
+    // zweiter Versuch nicht heilt.
+    if (r.status !== 429 && r.status !== 529) throw new Error("Anthropic antwortete mit HTTP " + r.status);
+    if (attempt === 0) await new Promise(res => setTimeout(res, 1000));
+  }
+  throw new Error("Anthropic ist gerade überlastet.");
+}
 async function handleAiSuggest(req, res){
   const limitError = rateLimitCheck(clientIp(req));
   if (limitError){
@@ -223,12 +307,41 @@ async function handleAiSuggest(req, res){
     return;
   }
 
-  // Platzhalter — wird in Task 2 durch den echten Anthropic-Aufruf ersetzt.
-  res.writeHead(200, {"Content-Type":"application/json"});
-  res.end(JSON.stringify({ok:true, suggestion:{
-    line: payload.palette[0].line, color: payload.palette[0].colors[0],
-    infill: 20, layer: 0.2, walls: 3, notes: "", reason: "Platzhalter."
-  }}));
+  if (!ANTHROPIC_API_KEY){
+    res.writeHead(500, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt."}));
+    return;
+  }
+
+  try {
+    const data = await callAnthropic(buildRequestBody(description, payload.palette));
+    if (data.stop_reason === "refusal"){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:"Zu dieser Beschreibung gibt es keinen Vorschlag. Bitte formuliere sie anders."}));
+      return;
+    }
+    // Bei max_tokens ist die Antwort mitten im JSON abgeschnitten. Ohne eigenen Zweig
+    // scheitert erst JSON.parse und der Kunde bekäme eine Parser-Meldung zu lesen.
+    if (data.stop_reason === "max_tokens")
+      throw new Error("Die Antwort wurde abgeschnitten. Bitte beschreibe dein Vorhaben kürzer.");
+    const block = (data.content || []).find(b => b.type === "text");
+    if (!block) throw new Error("Antwort ohne Textblock.");
+    const s = JSON.parse(block.text);
+
+    res.writeHead(200, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:true, suggestion:{
+      line:   s.line,
+      color:  s.color,                       // Prüfung macht der Client, dort liegt die Palette
+      infill: clampInfill(s.infill),
+      layer:  s.layer,
+      walls:  s.walls,
+      notes:  String(s.notes  || "").trim().slice(0, 500),
+      reason: String(s.reason || "").trim().slice(0, 500)
+    }}));
+  } catch (e){
+    res.writeHead(502, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"Der Vorschlag hat nicht geklappt: " + e.message}));
+  }
 }
 
 const ROUTES = {
@@ -258,4 +371,5 @@ if (require.main === module){
 }
 
 // Für die Tests (tests/server.mjs) — beim Einbinden als Modul startet oben kein Listener.
-module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit };
+module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit,
+                   buildSchema, systemPrompt, buildRequestBody };

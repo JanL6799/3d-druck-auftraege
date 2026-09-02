@@ -301,7 +301,7 @@ git commit -m "feat(server): /ai-suggest mit Eingabepruefung und Rate-Limit"
 - Consumes: `clampInfill`, `validPalette` aus Task 1
 - Produces: `buildSchema(palette) -> object`, `systemPrompt(palette) -> string`, `buildRequestBody(description, palette) -> object`
 
-- [ ] **Step 1: Failing tests ergänzen**
+- [x] **Step 1: Failing tests ergänzen**
 
 In `tests/server.mjs` vor der Ausgabe-Schleife einfügen:
 
@@ -351,12 +351,12 @@ test('effort geht an Opus, aber nicht an Haiku (Haiku lehnt es mit 400 ab)', () 
 
 Ergänze den Export-Block am Ende von `tests/server.mjs` nicht — die Ausgabe-Schleife bleibt, wo sie ist; die neuen Tests stehen davor.
 
-- [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
+- [x] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
 Run: `node tests/server.mjs`
 Expected: die sechs neuen Tests `FAIL` mit „api.buildSchema is not a function" o. ä.
 
-- [ ] **Step 3: Schema, Prompt und Request-Body implementieren**
+- [x] **Step 3: Schema, Prompt und Request-Body implementieren**
 
 In `server/api-server.js` nach `validPalette` einfügen:
 
@@ -423,7 +423,7 @@ function buildRequestBody(description, palette, model = ANTHROPIC_MODEL){
 }
 ```
 
-- [ ] **Step 4: Aufruf mit Retry**
+- [x] **Step 4: Aufruf mit Retry**
 
 ```js
 async function callAnthropic(body){
@@ -447,7 +447,7 @@ async function callAnthropic(body){
 }
 ```
 
-- [ ] **Step 5: Platzhalter im Handler ersetzen**
+- [x] **Step 5: Platzhalter im Handler ersetzen**
 
 Den Platzhalter-Block aus Task 1 Step 4 ersetzen durch:
 
@@ -485,19 +485,19 @@ Den Platzhalter-Block aus Task 1 Step 4 ersetzen durch:
   }
 ```
 
-- [ ] **Step 6: Export ergänzen**
+- [x] **Step 6: Export ergänzen**
 
 ```js
 module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit,
                    buildSchema, systemPrompt, buildRequestBody };
 ```
 
-- [ ] **Step 7: Tests laufen lassen**
+- [x] **Step 7: Tests laufen lassen**
 
 Run: `node tests/server.mjs`
 Expected: 19 Tests, alle grün.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add server/api-server.js tests/server.mjs
