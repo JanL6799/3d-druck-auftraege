@@ -625,7 +625,7 @@ git commit -m "chore(dev): lokaler Server fuer die Ansicht ohne nginx"
 - Consumes: `POST /api/ai-suggest` aus Task 2
 - Produces: `applySuggestion(s)` und `requestSuggestion()` — nur intern in `index.html`, keine weiteren Tasks bauen darauf auf
 
-- [ ] **Step 1: Karte ins Markup**
+- [x] **Step 1: Karte ins Markup**
 
 Direkt **vor** `<div class="card"><h3>Druckeinstellungen</h3>` (`index.html:238`) einfügen:
 
@@ -641,7 +641,7 @@ Direkt **vor** `<div class="card"><h3>Druckeinstellungen</h3>` (`index.html:238`
     </div>
 ```
 
-- [ ] **Step 2: Konstante ergänzen**
+- [x] **Step 2: Konstante ergänzen**
 
 Bei den bestehenden API-Konstanten (`index.html:381`):
 
@@ -649,7 +649,7 @@ Bei den bestehenden API-Konstanten (`index.html:381`):
 const AI_API_URL = "/api/ai-suggest";
 ```
 
-- [ ] **Step 3: Übernahme-Logik**
+- [x] **Step 3: Übernahme-Logik**
 
 Im Abschnitt „Eingaben" einfügen, direkt nach der Zeile
 `["walls","qty","scale","ship"].forEach(...)` (`index.html:921`). Der `$`-Helfer ist ab
@@ -717,7 +717,7 @@ Mit beiden Terminals aus Task 3: `http://127.0.0.1:8000` öffnen, „Halterung f
 
 Expected: Material springt auf eine PETG-Linie, ein Swatch ist markiert, Infill/Schichthöhe/Wandstärke ändern sich samt Beschriftung, der Preis rechnet sich neu, und unter dem Button steht die Begründung.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add index.html
