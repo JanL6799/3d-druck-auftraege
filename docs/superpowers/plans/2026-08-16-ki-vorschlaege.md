@@ -518,7 +518,7 @@ Jan will das Feature vor dem Deploy lokal sehen. `index.html` ruft `/api/...` re
 - Consumes: die laufende `server/api-server.js` auf `127.0.0.1:8181`
 - Produces: nichts, was andere Tasks nutzen
 
-- [ ] **Step 1: Dev-Server schreiben**
+- [x] **Step 1: Dev-Server schreiben**
 
 `dev/serve.mjs`:
 
@@ -570,7 +570,7 @@ http.createServer(async (req, res) => {
 }).listen(PORT, '127.0.0.1', () => console.log(`Lokale Ansicht: http://127.0.0.1:${PORT}`));
 ```
 
-- [ ] **Step 2: npm-Skript ergänzen**
+- [x] **Step 2: npm-Skript ergänzen**
 
 `package.json`:
 
@@ -607,7 +607,7 @@ Expected: `{"ok":true,"suggestion":{"line":"PETG Basic",...}}` — die Linie sol
 
 Ohne Key gesetzt: `{"ok":false,"error":"ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt."}` mit HTTP 500.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add dev/serve.mjs package.json
