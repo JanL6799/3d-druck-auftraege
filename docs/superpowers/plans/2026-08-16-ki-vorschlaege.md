@@ -581,7 +581,7 @@ http.createServer(async (req, res) => {
   },
 ```
 
-- [ ] **Step 3: Von Hand prüfen, dass die Kette steht**
+- [x] **Step 3: Von Hand prüfen, dass die Kette steht**
 
 Zwei Terminals:
 
