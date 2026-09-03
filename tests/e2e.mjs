@@ -590,6 +590,34 @@ await test('Leere Beschreibung ruft den Server gar nicht erst auf', async () => 
 });
 
 
+await test('backend.html hat den KI-Vorschlag ebenfalls, Uebernahme funktioniert', async () => {
+  const call = await pageB.evaluate(async () => {
+    const orig = window.fetch;
+    let captured = null;
+    // backend.html schreibt bei jeder Wertaenderung /api/calcbase zurueck — ohne Filter
+    // wuerde dieser Aufruf den erfassten ai-suggest-Aufruf ueberschreiben.
+    window.fetch = async (url, opts) => {
+      if (!String(url).includes('ai-suggest')) return { ok: true, json: async () => ({ok:true}) };
+      captured = { url, body: JSON.parse(opts.body) };
+      return { ok: true, json: async () => ({ok:true, suggestion:{
+        line:'PETG Basic', color:'Black', infill:45, layer:0.16, walls:4,
+        notes:'', reason:'Backend-Test.'
+      }}) };
+    };
+    document.getElementById('aiWish').value = 'Halterung, muss Regen abkönnen';
+    document.getElementById('btnAi').click();
+    await new Promise(r => setTimeout(r, 300));
+    window.fetch = orig;
+    return captured;
+  });
+  assert.equal(call.url, '/api/ai-suggest');
+  assert.ok(call.body.palette.some(g => g.line === 'PETG Basic'));
+  assert.equal(await pageB.$eval('#infill', el => el.value), '45');
+  assert.equal(await pageB.$eval('#walls',  el => el.value), '4');
+  assert.match(await text('#cHex', pageB), /PETG Basic/);
+  assert.match(await text('#aiOut', pageB), /Backend-Test/);
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });

@@ -14,6 +14,8 @@ REPO=/home/jan/3d-druck-auftraege
 UNIT=/etc/systemd/system/druckauftrag-backup.service
 SITE=/etc/nginx/sites-available/drucken.luetje.me
 WEBROOT=/var/www/drucken.luetje.me
+SITE_LOKAL=/etc/nginx/sites-available/backend-lokal
+WEBROOT_LOKAL=/var/www/backend.druckauftrag
 
 read -rsp "Anthropic-API-Key (console.anthropic.com): " ANTHROPIC_API_KEY; echo
 [ -n "$ANTHROPIC_API_KEY" ] || { echo "Kein Key eingegeben, Abbruch." >&2; exit 1; }
@@ -27,16 +29,23 @@ sed -i '/^Environment=ANTHROPIC_/d' "$UNIT"
 sed -i "/^ExecStart=/a Environment=ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY\nEnvironment=ANTHROPIC_MODEL=$ANTHROPIC_MODEL" "$UNIT"
 chmod 600 "$UNIT"
 
-echo "== 2/4: nginx-Route =="
-if grep -q '/api/ai-suggest' "$SITE"; then
-  echo "   Route existiert schon, übersprungen."
-else
-  sed -i '/location \/api\/send-mail/i\    location = /api/ai-suggest {\n        proxy_pass http://127.0.0.1:8181/ai-suggest;\n    }\n' "$SITE"
-fi
+echo "== 2/4: nginx-Routen =="
+# Beide Sites brauchen die Route: die oeffentliche fuer Kunden, die Heimnetz-Site
+# (Port 8080) damit Jan im Backend testen kann, ohne die Kundenseite anzufassen.
+for site in "$SITE" "$SITE_LOKAL"; do
+  [ -f "$site" ] || { echo "   $site fehlt, uebersprungen."; continue; }
+  if grep -q '/api/ai-suggest' "$site"; then
+    echo "   $(basename "$site"): Route existiert schon, uebersprungen."
+  else
+    sed -i '/location \/api\/send-mail/i\    location = /api/ai-suggest {\n        proxy_pass http://127.0.0.1:8181/ai-suggest;\n    }\n' "$site"
+    echo "   $(basename "$site"): Route ergaenzt."
+  fi
+done
 nginx -t
 
-echo "== 3/4: index.html in den Webroot =="
+echo "== 3/4: Seiten in die Webroots =="
 cp "$REPO/index.html" "$WEBROOT/index.html"
+[ -d "$WEBROOT_LOKAL" ] && cp "$REPO/backend.html" "$WEBROOT_LOKAL/backend.html"
 
 echo "== 4/4: Dienste neu laden =="
 systemctl daemon-reload

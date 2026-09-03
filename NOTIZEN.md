@@ -23,10 +23,10 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup, Mail-Versand, Kalkulationsbasis), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
-| `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route, Webroot-Kopie), siehe „Deployment“ |
+| `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien), siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 36 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 37 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `tests/server.mjs` | 19 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
@@ -603,6 +603,12 @@ Zweite Runde:
 `POST /api/ai-suggest` nimmt Beschreibung und Farbpalette entgegen und liefert Material,
 Farbe, Infill, Schichthöhe, Wandstärke, Notiz und Begründung zurück. Eingerichtet wird das
 mit `deploy/setup-ki-vorschlag.sh` (fragt Key und Modell ab).
+
+Die Karte steckt in **beiden** Seiten: in `index.html` für den Kunden, in `backend.html`
+damit Jan in Ruhe ausprobieren kann, ohne die Kundenseite anzufassen. Der Code ist
+dupliziert wie `PALETTE_LINES` und `render()` auch — beide Seiten sind bewusst
+self-contained. Deshalb braucht **auch die Heimnetz-Site** (`backend-lokal`, Port 8080) die
+`/api/ai-suggest`-Route; das Setup-Skript ergänzt sie in beiden nginx-Sites.
 
 - Modell über `ANTHROPIC_MODEL` umschaltbar, Standard `claude-opus-5`. Kosten je 1000
   Anfragen grob: Opus 5 ~6,50 $, Sonnet 5 ~2,60 $, Haiku 4.5 ~1,30 $.
