@@ -737,7 +737,7 @@ Gemockt wird nach dem Muster des bestehenden Mail-Tests (`tests/e2e.mjs:413`): `
 - Consumes: `applySuggestion`, `#aiWish`, `#btnAi`, `#aiOut` aus Task 4
 - Produces: nichts
 
-- [ ] **Step 1: Tests schreiben**
+- [x] **Step 1: Tests schreiben**
 
 ```js
 /* ---------- KI-Vorschlag ---------- */
@@ -827,7 +827,7 @@ await test('Leere Beschreibung ruft den Server gar nicht erst auf', async () => 
 Run: `npm test`
 Expected: 35 E2E-Tests grün (30 bestehende + 5 neue), danach 19 Server-Tests grün.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/e2e.mjs

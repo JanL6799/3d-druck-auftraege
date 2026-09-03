@@ -514,6 +514,90 @@ await browser.close();
 
 /* ---------- Ergebnis ---------- */
 let failed = 0;
+
+/* ---------- KI-Vorschlag ---------- */
+// Kein echter API-Aufruf: window.fetch wird in der Seite ersetzt, wie beim Mail-Test.
+// Ein echter Aufruf kostet Geld und braeuchte den Key als GitHub-Secret.
+
+const aiSuggest = (suggestion, ok = true, error = null) => page.evaluate(async ({suggestion, ok, error}) => {
+  const orig = window.fetch;
+  let captured = null;
+  window.fetch = async (url, opts) => {
+    captured = { url, body: JSON.parse(opts.body) };
+    return { ok: true, json: async () => ok ? {ok:true, suggestion} : {ok:false, error} };
+  };
+  document.getElementById('aiWish').value = 'Halterung fürs Fahrrad, muss Regen abkönnen';
+  document.getElementById('btnAi').click();
+  await new Promise(r => setTimeout(r, 300));
+  window.fetch = orig;
+  return captured;
+}, {suggestion, ok, error});
+
+await test('KI-Vorschlag füllt Einstellungen und Material, Preis rechnet neu', async () => {
+  await loadStl(boxSTL(20,20,20), 'cube.stl');
+  const preisVorher = await text('#rTotal');
+  const call = await aiSuggest({
+    line:'PETG Basic', color:'Red', infill:40, layer:0.28, walls:5,
+    notes:'Bitte ohne Stützen.', reason:'PETG hält Regen und UV aus.'
+  });
+
+  assert.equal(call.url, '/api/ai-suggest');
+  assert.match(call.body.description, /Fahrrad/);
+  assert.ok(call.body.palette.some(g => g.line === 'PETG Basic'),
+    'Palette muss mitgeschickt werden, sonst kann das Modell keine echten Farben wählen');
+
+  assert.equal(await page.$eval('#infill', el => el.value), '40');
+  assert.equal(await page.$eval('#layer',  el => el.value), '0.28');
+  assert.equal(await page.$eval('#walls',  el => el.value), '5');
+  assert.equal(await text('#lInfill'), '40 %');
+  assert.match(await text('#cHex'), /PETG Basic/);
+  assert.equal(await text('#cName'), 'Red');
+  assert.match(await text('#aiOut'), /PETG hält Regen/);
+  assert.notEqual(await text('#rTotal'), preisVorher, 'Materialwechsel muss den Preis ändern');
+});
+
+await test('Unbekannter Farbname fällt auf die erste Farbe der Linie zurück', async () => {
+  await aiSuggest({
+    line:'PETG Basic', color:'Gibtsnicht', infill:20, layer:0.2, walls:3,
+    notes:'', reason:'Test.'
+  });
+  assert.equal(await text('#cName'), 'Red', 'erste Farbe von PETG Basic');
+});
+
+await test('KI-Notiz wird angehängt, nicht überschrieben', async () => {
+  await page.fill('#notes', 'Eigener Hinweis.');
+  await aiSuggest({
+    line:'PLA Basic', color:'Black', infill:20, layer:0.2, walls:3,
+    notes:'Bitte ohne Stützen.', reason:'Test.'
+  });
+  const notes = await page.$eval('#notes', el => el.value);
+  assert.match(notes, /Eigener Hinweis\./);
+  assert.match(notes, /Bitte ohne Stützen\./);
+});
+
+await test('Serverfehler zeigt Meldung und lässt die Werte in Ruhe', async () => {
+  await page.fill('#notes', '');
+  const infillVorher = await page.$eval('#infill', el => el.value);
+  await aiSuggest(null, false, 'Das Tageslimit für KI-Vorschläge ist erreicht.');
+  assert.match(await text('#aiOut'), /Tageslimit/);
+  assert.equal(await page.$eval('#infill', el => el.value), infillVorher);
+});
+
+await test('Leere Beschreibung ruft den Server gar nicht erst auf', async () => {
+  const called = await page.evaluate(async () => {
+    const orig = window.fetch;
+    let hit = false;
+    window.fetch = async () => { hit = true; return {ok:true, json: async () => ({ok:true})}; };
+    document.getElementById('aiWish').value = '   ';
+    document.getElementById('btnAi').click();
+    await new Promise(r => setTimeout(r, 200));
+    window.fetch = orig;
+    return hit;
+  });
+  assert.equal(called, false);
+  assert.match(await text('#aiOut'), /beschreib/i);
+});
+
 for (const [st, name] of results){
   if (st === 'FAIL') failed++;
   console.log(st + '  ' + name);
