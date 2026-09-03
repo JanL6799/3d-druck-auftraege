@@ -847,7 +847,7 @@ git commit -m "test: E2E-Tests fuer den KI-Vorschlag"
 - Consumes: die Route aus Task 2
 - Produces: nichts
 
-- [ ] **Step 1: Deploy-Skript schreiben**
+- [x] **Step 1: Deploy-Skript schreiben**
 
 `deploy/setup-ki-vorschlag.sh`, nach dem Muster von `deploy/setup-mail-feature.sh`:
 
@@ -903,14 +903,14 @@ echo "  curl -s -X POST https://drucken.luetje.me/api/ai-suggest -H 'content-typ
 echo "    -d '{\"description\":\"Test\",\"palette\":[{\"line\":\"PLA Basic\",\"colors\":[\"Black\"]}]}'"
 ```
 
-- [ ] **Step 2: Skript prüfen, ohne es auszuführen**
+- [x] **Step 2: Skript prüfen, ohne es auszuführen**
 
 Run: `bash -n deploy/setup-ki-vorschlag.sh`
 Expected: keine Ausgabe (Syntax in Ordnung).
 
 Das Skript selbst **nicht** ausführen — es braucht sudo mit Passwort und gehört Jan.
 
-- [ ] **Step 3: NOTIZEN.md nachziehen**
+- [x] **Step 3: NOTIZEN.md nachziehen**
 
 Drei Stellen:
 
@@ -939,7 +939,7 @@ Material, Farbe, Infill, Schichthöhe, Wandstärke, Notiz und Begründung zurüc
   `max_tokens` Denken plus Antwort zusammen deckelt.
 ```
 
-- [ ] **Step 4: README.md ergänzen**
+- [x] **Step 4: README.md ergänzen**
 
 Einen Absatz in der Feature-Liste: Kunde beschreibt sein Vorhaben im Freitext, die Seite schlägt Material, Farbe und Einstellungen vor; braucht `ANTHROPIC_API_KEY` auf dem Server, ohne den läuft alles andere unverändert.
 
@@ -948,7 +948,7 @@ Einen Absatz in der Feature-Liste: Kunde beschreibt sein Vorhaben im Freitext, d
 Run: `npm test`
 Expected: alles grün.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add deploy/setup-ki-vorschlag.sh NOTIZEN.md README.md

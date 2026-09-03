@@ -23,8 +23,11 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup, Mail-Versand, Kalkulationsbasis), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
+| `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route, Webroot-Kopie), siehe „Deployment“ |
+| `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 31 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 36 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/server.mjs` | 19 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -70,8 +73,11 @@ lokalen Doppelklick-Nutzung. Setup:
     `/var/backups/druckauftrag/calcbase.json`. Ersetzt seit der Trennung von `backend.html`
     auf einen eigenen Origin den früheren `localStorage`-Sharing-Mechanismus (siehe
     „Öffentliche Seite vs. Backend").
+  - `POST /api/ai-suggest` — nimmt eine Freitext-Beschreibung des Kunden plus die Farbpalette
+    entgegen und liefert Material, Farbe, Infill, Schichthöhe, Wandstärke, Notiz und
+    Begründung zurück (Anthropic Messages API, Structured Output). Siehe „KI-Vorschlag“ unten.
 
-  nginx leitet alle vier Pfade weiter — **öffentliche Site** bekommt `/api/send-mail` und
+  nginx leitet alle fünf Pfade weiter — **öffentliche Site** bekommt `/api/send-mail` und
   `/api/calcbase` (GET, von index.html gelesen), **Heimnetz-Site** (`backend-lokal`, Port 8080)
   bekommt zusätzlich `/api/backup` und schreibt `/api/calcbase` (POST). `X-Backup-Secret` ist
   **kein echtes Geheimnis** — die Apps sind clientseitige Seiten, der Wert steht im Quelltext
@@ -109,6 +115,9 @@ lokalen Doppelklick-Nutzung. Setup:
   }
   location /api/calcbase {
       proxy_pass http://127.0.0.1:8181/calcbase;
+  }
+  location = /api/ai-suggest {
+      proxy_pass http://127.0.0.1:8181/ai-suggest;
   }
   ```
   Danach `sudo systemctl daemon-reload && sudo systemctl enable --now druckauftrag-backup`
@@ -588,6 +597,51 @@ Zweite Runde:
 5. **Bauraum konfigurierbar + v1 wieder ladbar.** X/Y/Z frei einstellbar mit 90°-Rotationslogik
    in der Warnung; `applyState()` migriert v1-Stände (best-effort) und lehnt neuere Formate mit
    klarer Meldung ab.
+
+### KI-Vorschlag
+
+`POST /api/ai-suggest` nimmt Beschreibung und Farbpalette entgegen und liefert Material,
+Farbe, Infill, Schichthöhe, Wandstärke, Notiz und Begründung zurück. Eingerichtet wird das
+mit `deploy/setup-ki-vorschlag.sh` (fragt Key und Modell ab).
+
+- Modell über `ANTHROPIC_MODEL` umschaltbar, Standard `claude-opus-5`. Kosten je 1000
+  Anfragen grob: Opus 5 ~6,50 $, Sonnet 5 ~2,60 $, Haiku 4.5 ~1,30 $.
+- Limit: 10 Anfragen je IP und Stunde, 200 am Tag. Die Zähler liegen im Arbeitsspeicher und
+  sind nach einem Neustart des Dienstes wieder auf null — bewusst so, Persistenz wäre für
+  eine Bremse gegen Missbrauch zu viel Aufwand.
+- Die Farbpalette lebt ausschließlich in `index.html` und geht mit dem Request raus. Der
+  Server prüft nur die Struktur (≤10 Linien, ≤50 Farben je Linie, ≤40 Zeichen je Name); den
+  Farbnamen löst der Client gegen `PALETTE_LINES` auf. So gibt es genau eine Quelle der
+  Wahrheit für Materialien und Farben.
+- `output_config.effort` geht bewusst **nicht** an Haiku-Modelle — die lehnen das Feld mit
+  HTTP 400 ab. Da das Modell per Env-Var umschaltbar ist, prüft `buildRequestBody` den Namen.
+- `max_tokens` steht auf 8000. Opus 5 denkt standardmäßig adaptiv mit, und `max_tokens`
+  deckelt Denken **plus** Antwort; ein knapper Wert schneidet mitten im JSON ab. Abgerechnet
+  werden ohnehin nur erzeugte Token, der hohe Deckel kostet also nichts. `stop_reason`
+  `max_tokens` wird eigens abgefangen, sonst scheiterte erst `JSON.parse`.
+- Schichthöhe und Wandstärke sind im JSON-Schema als Enum modelliert, weil Structured
+  Outputs weder `minimum`/`maximum` noch `multipleOf` unterstützt. Infill wird nachträglich
+  serverseitig geklemmt und auf 5er-Schritte gerundet.
+- Fehlertexte der API landen im Journal (`journalctl -u druckauftrag-backup`), nicht in der
+  Antwort an den Kunden — auf der öffentlichen Seite haben API-Interna nichts zu suchen.
+- Fällt Server, Key oder API aus, bleibt die Seite unverändert von Hand bedienbar. Das
+  Feature ist rein additiv.
+
+**Achtung bei den Deploy-Skripten:** `setup-mail-feature.sh` schreibt die systemd-Unit
+komplett neu. Es rettet inzwischen auch die `ANTHROPIC_*`-Zeilen, vorher hätte ein Lauf nach
+`setup-ki-vorschlag.sh` den Key stillschweigend gelöscht.
+
+**Lokal anschauen ohne Deploy:** Der produktive Dienst hält bereits `127.0.0.1:8181`, eine
+zweite Instanz kann dort nicht binden. Deshalb auf einem anderen Port starten und
+`dev/serve.mjs` per `DEV_API` darauf zeigen lassen:
+
+```bash
+ANTHROPIC_API_KEY=... BACKUP_PORT=8182 BACKUP_DIR=/tmp/druck-dev node server/api-server.js
+DEV_API=http://127.0.0.1:8182 npm run dev    # zweites Terminal, dann http://127.0.0.1:8000
+```
+
+Ohne den `DEV_API`-Schalter proxyt der Dev-Server still gegen Produktion und man testet die
+deployte statt der neuen Version.
 
 ## Offene Punkte
 

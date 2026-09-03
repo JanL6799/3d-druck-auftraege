@@ -29,6 +29,9 @@ const MAX_BODY_BACKUP = 25 * 1024 * 1024; // 25 MB genügt für eine Auftragslis
 const MAX_BODY_MAIL   = 35 * 1024 * 1024; // Modell als STL kommt base64-kodiert mit (~1,33x)
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_MODEL   = process.env.ANTHROPIC_MODEL   || "claude-opus-5";
+// Jans Account gibt identity-linked Keys aus; die lehnt die API ohne Workspace-Angabe
+// mit 400 ab. Bei einem normalen Key bleibt die Variable leer und der Header entfaellt.
+const ANTHROPIC_WORKSPACE = process.env.ANTHROPIC_WORKSPACE_ID || "";
 const MAX_BODY_AI       = 64 * 1024;   // Beschreibung + Palette, mehr braucht es nie
 const AI_PER_IP_HOUR    = 10;
 const AI_PER_DAY        = 200;
@@ -270,7 +273,8 @@ async function callAnthropic(body){
       headers: {
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
+        "content-type": "application/json",
+        ...(ANTHROPIC_WORKSPACE ? {"anthropic-workspace-id": ANTHROPIC_WORKSPACE} : {})
       },
       body: JSON.stringify(body)
     });
