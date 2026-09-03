@@ -711,7 +711,7 @@ async function requestSuggestion(){
 $("btnAi").onclick = requestSuggestion;
 ```
 
-- [ ] **Step 4: Von Hand im Browser prüfen**
+- [x] **Step 4: Von Hand im Browser prüfen**
 
 Mit beiden Terminals aus Task 3: `http://127.0.0.1:8000` öffnen, „Halterung fürs Fahrrad, muss Regen abkönnen" eintippen, Button klicken.
 
@@ -822,7 +822,7 @@ await test('Leere Beschreibung ruft den Server gar nicht erst auf', async () => 
 });
 ```
 
-- [ ] **Step 2: Tests laufen lassen**
+- [x] **Step 2: Tests laufen lassen**
 
 Run: `npm test`
 Expected: 35 E2E-Tests grün (30 bestehende + 5 neue), danach 19 Server-Tests grün.

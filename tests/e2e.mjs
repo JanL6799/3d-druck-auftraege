@@ -506,15 +506,6 @@ await test('Darstellung-Toggle merkt sich die Wahl über einen Reload', async ()
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), after);
 });
 
-await test('Keine JS-Fehler im gesamten Lauf', () => {
-  assert.deepEqual(jsErrors, []);
-});
-
-await browser.close();
-
-/* ---------- Ergebnis ---------- */
-let failed = 0;
-
 /* ---------- KI-Vorschlag ---------- */
 // Kein echter API-Aufruf: window.fetch wird in der Seite ersetzt, wie beim Mail-Test.
 // Ein echter Aufruf kostet Geld und braeuchte den Key als GitHub-Secret.
@@ -597,6 +588,16 @@ await test('Leere Beschreibung ruft den Server gar nicht erst auf', async () => 
   assert.equal(called, false);
   assert.match(await text('#aiOut'), /beschreib/i);
 });
+
+
+await test('Keine JS-Fehler im gesamten Lauf', () => {
+  assert.deepEqual(jsErrors, []);
+});
+
+await browser.close();
+
+/* ---------- Ergebnis ---------- */
+let failed = 0;
 
 for (const [st, name] of results){
   if (st === 'FAIL') failed++;
