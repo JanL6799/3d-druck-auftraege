@@ -277,7 +277,12 @@ async function callAnthropic(body){
     if (r.ok) return r.json();
     // 429 = Rate-Limit, 529 = überlastet. Alles andere ist ein echter Fehler, den ein
     // zweiter Versuch nicht heilt.
-    if (r.status !== 429 && r.status !== 529) throw new Error("Anthropic antwortete mit HTTP " + r.status);
+    // Der Fehlertext geht ins Journal, nicht an den Kunden — sonst stuenden API-Interna
+    // auf der oeffentlichen Seite. Ohne ihn ist jede 400 aber Ratespiel.
+    if (r.status !== 429 && r.status !== 529){
+      console.error("Anthropic-Fehler", r.status, await r.text().catch(() => ""));
+      throw new Error("Anthropic antwortete mit HTTP " + r.status);
+    }
     if (attempt === 0) await new Promise(res => setTimeout(res, 1000));
   }
   throw new Error("Anthropic ist gerade überlastet.");
