@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Richtet den KI-Vorschlag auf dem Pi ein: ANTHROPIC_API_KEY in die systemd-Unit,
-# nginx-Route /api/ai-suggest auf den Dienst, Webroot-Kopie von index.html.
+# nginx-Routen /api/model und /api/scad auf den Dienst, Webroot-Kopie von index.html.
 #
 # Ausführen mit: sudo bash deploy/setup-ki-vorschlag.sh
 #   Key und Modell werden, wenn vorhanden, aus ~/.config/druckauftrag/env des aufrufenden
@@ -66,13 +66,6 @@ echo "== 2/4: nginx-Routen =="
 if [ "$NUR_BACKEND" -eq 1 ]; then SITES=("$SITE_LOKAL"); else SITES=("$SITE" "$SITE_LOKAL"); fi
 for site in "${SITES[@]}"; do
   [ -f "$site" ] || { echo "   $site fehlt, uebersprungen."; continue; }
-  if grep -q '/api/ai-suggest' "$site"; then
-    echo "   $(basename "$site"): Route existiert schon, uebersprungen."
-  else
-    sed -i '/location \/api\/send-mail/i\    location = /api/ai-suggest {\n        proxy_pass http://127.0.0.1:8181/ai-suggest;\n    }\n' "$site"
-    echo "   $(basename "$site"): Route ergaenzt."
-  fi
-
   # /api/model ist oeffentlich: Foto + Beschreibung -> Moderation -> Modell. Der groessere
   # Body-Deckel ist noetig, weil das base64-kodierte Bild mitkommt; ohne ihn antwortet
   # nginx mit 413, bevor der Dienst die Anfrage ueberhaupt sieht.
@@ -139,7 +132,7 @@ systemctl reload nginx
 echo
 if [ "$NUR_BACKEND" -eq 1 ]; then
   echo "Fertig — ABER NUR IM HEIMNETZ."
-  echo "Die öffentliche Seite drucken.luetje.me ist unverändert: keine /api/ai-suggest-Route,"
+  echo "Die öffentliche Seite drucken.luetje.me ist unverändert: keine /api/model-Route,"
   echo "alte index.html im Webroot. Kunden sehen den Knopf nicht."
   echo "Wenn es passt, dasselbe Skript ohne --nur-backend noch einmal laufen lassen."
   echo
@@ -150,8 +143,8 @@ else
   # Ohne X-Backup-Secret antwortet der Dienst mit 403 — der Wert steht im ausgelieferten
   # index.html, ist also kein Geheimnis, muss aber mitgeschickt werden.
   SEC=$(sed -n 's/^const BACKUP_SECRET = "\(.*\)";/\1/p' "$REPO/index.html")
-  echo "Kurztest:"
-  echo "  curl -s -X POST https://drucken.luetje.me/api/ai-suggest \\"
+  echo "Kurztest (erzeugt ein Modell, kostet einen API-Aufruf):"
+  echo "  curl -s -X POST https://drucken.luetje.me/api/model \\"
   echo "    -H 'content-type: application/json' -H 'X-Backup-Secret: $SEC' \\"
-  echo "    -d '{\"description\":\"Test\",\"palette\":[{\"line\":\"PLA Basic\",\"colors\":[\"Black\"]}]}'"
+  echo "    -d '{\"description\":\"Distanzhuelse aussen 20 mm innen 8 mm 15 mm hoch\"}'"
 fi

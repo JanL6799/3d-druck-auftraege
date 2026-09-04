@@ -15,7 +15,7 @@ Extras fehlen dann.
   er selbst, wenn eine Anfrage reingekommen ist — nur im Heimnetz erreichbar, nicht über die
   öffentliche Domain.
 
-![Screenshot: Modellvorschau und Live-Kalkulation](docs/screenshot.png)
+![Screenshot: die öffentliche Seite mit Modellerzeugung, Kontakt und Kalkulation](docs/screenshot.png)
 
 ## Ablauf
 
@@ -32,23 +32,18 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
   Bambu Studio), eigene 3D-Vorschau (Canvas-Software-Renderer). Warnt bei nicht
   wasserdichten Meshes und bei Teilen, die den eingestellten Bauraum sprengen
   (90°-Drehung wird berücksichtigt).
-- **KI-Vorschlag (öffentliche Seite):** Der Kunde beschreibt sein Vorhaben in einem Satz
-  („Halterung fürs Fahrrad, muss Regen abkönnen") und bekommt Material, Farbe, Infill,
-  Schichthöhe und Wandstärke vorgeschlagen — samt Begründung in Alltagssprache. Der größte
-  Nutzen liegt beim Material: dass PLA in der Sonne weich wird und PETG nicht, weiß ein Laie
-  nicht. Alles bleibt danach frei änderbar; das Feature schlägt vor, es entscheidet nicht.
-  Braucht `ANTHROPIC_API_KEY` auf dem Server — fehlt er, funktioniert alles andere
-  unverändert weiter.
-- **Modell erzeugen lassen (nur im Backend):** Ein einfaches Teil mit Maßen beschreiben
-  („Distanzhülse, außen 20 mm, innen 8 mm, 15 mm hoch") — die KI schreibt ein parametrisches
-  OpenSCAD-Skript, der Pi rendert es zu STL, und es landet direkt in Vorschau und
-  Kalkulation. Das Skript steht daneben und lässt sich nachjustieren: eine Zahl ändern,
-  neu rendern, kostenlos. Für Geometrie gedacht, nicht für Figuren.
-- **Foto hochladen statt Datei (öffentliche Seite):** Kein 3D-Modell zur Hand? Gegenstand
-  fotografieren oder ein Bild aus der Mediathek wählen, kurz beschreiben — daraus entsteht ein
-  Modell. Jedes Bild wird vorher automatisch geprüft; Fotos mit erkennbaren Personen werden
-  abgelehnt und nicht weiterverarbeitet, gespeichert wird ohnehin nichts. Höchstens fünf
-  Modelle je Stunde und Anschluss.
+- **Modell erzeugen lassen (öffentliche Seite):** Kein 3D-Modell zur Hand? Der Kunde
+  beschreibt ein einfaches Teil mit Maßen („Distanzhülse, außen 20 mm, innen 8 mm, 15 mm
+  hoch") und darf freiwillig ein Foto dazulegen — fotografieren oder aus der Mediathek. Die
+  KI schreibt daraus ein parametrisches OpenSCAD-Skript, der Pi rendert es zu STL, es landet
+  direkt in Vorschau und Kalkulation und lässt sich als Datei herunterladen. Jedes Foto und
+  jede Beschreibung wird vorab automatisch geprüft; Bilder mit erkennbaren Personen und
+  anstößige Inhalte werden abgelehnt, gespeichert wird nichts. Höchstens fünf Modelle je
+  Stunde und Anschluss. Für Geometrie gedacht, nicht für Figuren. Braucht `ANTHROPIC_API_KEY`
+  auf dem Server — fehlt er, funktioniert alles andere unverändert weiter.
+- **Material & Farbe (öffentliche Seite):** PLA und PETG in Weiß, Grau und Schwarz — was ohne
+  Rückfrage lieferbar ist. Sonderwünsche schreibt der Kunde in die Notizen. Das interne
+  Backend behält die volle Bambu-Lab-Palette.
 - **Kalkulation:** Material, Strom, Maschinenzeit, Rüsten, Marge, MwSt. — steht direkt
   oben im Blick, keine Plattformgebühr. Die Druckzeit-Schätzung lässt sich im Backend durch
   die echte Slicer-Zeit übersteuern.
