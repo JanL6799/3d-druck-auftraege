@@ -342,8 +342,8 @@ await test('Aufträge: Frist-Countdown zeigt korrekten Text und sortiert nach Dr
 
 await test('Farbwahl legt Material für die Kalkulation fest', async () => {
   const cMatBefore = await page.evaluate(() => calc().cMat);
-  await page.locator('.sw[data-line="PETG-CF"]').first().click();
-  assert.match(await text('#cHex'), /PETG-CF/);
+  await page.locator('.sw[data-line="PETG Basic"]').first().click();
+  assert.match(await text('#cHex'), /PETG Basic/);
   const cMatAfter = await page.evaluate(() => calc().cMat);
   assert.notEqual(cMatAfter, cMatBefore);
 });
@@ -528,7 +528,7 @@ await test('KI-Vorschlag füllt Einstellungen und Material, Preis rechnet neu', 
   await loadStl(boxSTL(20,20,20), 'cube.stl');
   const preisVorher = await text('#rTotal');
   const call = await aiSuggest({
-    line:'PETG Basic', color:'Red', infill:40, layer:0.28, walls:5,
+    line:'PETG Basic', color:'Gray', infill:40, layer:0.28, walls:5,
     notes:'Bitte ohne Stützen.', reason:'PETG hält Regen und UV aus.'
   });
 
@@ -542,7 +542,7 @@ await test('KI-Vorschlag füllt Einstellungen und Material, Preis rechnet neu', 
   assert.equal(await page.$eval('#walls',  el => el.value), '5');
   assert.equal(await text('#lInfill'), '40 %');
   assert.match(await text('#cHex'), /PETG Basic/);
-  assert.equal(await text('#cName'), 'Red');
+  assert.equal(await text('#cName'), 'Gray');
   assert.match(await text('#aiOut'), /PETG hält Regen/);
   assert.notEqual(await text('#rTotal'), preisVorher, 'Materialwechsel muss den Preis ändern');
 });
@@ -552,7 +552,7 @@ await test('Unbekannter Farbname fällt auf die erste Farbe der Linie zurück', 
     line:'PETG Basic', color:'Gibtsnicht', infill:20, layer:0.2, walls:3,
     notes:'', reason:'Test.'
   });
-  assert.equal(await text('#cName'), 'Red', 'erste Farbe von PETG Basic');
+  assert.equal(await text('#cName'), 'White', 'erste Farbe von PETG Basic');
 });
 
 await test('KI-Notiz wird angehängt, nicht überschrieben', async () => {
@@ -773,6 +773,24 @@ await test('Ohne Beschreibung wird nichts hochgeladen', async () => {
   });
   assert.equal(called, false);
   assert.match(await text('#fotoOut'), /beschreib/i);
+});
+
+await test('Öffentliche Palette: nur PLA/PETG in Weiß, Grau, Schwarz — Backend unberührt', async () => {
+  const oeff = await page.evaluate(() => PALETTE_LINES.map(g => [g.line, g.colors.map(c => c[0])]));
+  assert.deepEqual(oeff, [
+    ['PLA Basic',  ['Jade White','Gray','Black']],
+    ['PETG Basic', ['White','Gray','Black']],
+  ]);
+  assert.equal(await page.$$eval('.sw', els => els.length), 6, 'sechs Farbfelder in der UI');
+
+  const intern = await pageB.evaluate(() => PALETTE_LINES.length);
+  assert.ok(intern >= 7, 'backend.html behaelt die volle Palette, hier: ' + intern);
+});
+
+await test('Kunden werden auf die Notizen für Sonderwünsche hingewiesen', async () => {
+  const txt = await page.evaluate(() => document.body.innerText);
+  assert.match(txt, /andere Farbe oder ein anderes[\s\S]*Material/i);
+  assert.match(txt, /Notizen/);
 });
 
 await test('Keine JS-Fehler im gesamten Lauf', () => {

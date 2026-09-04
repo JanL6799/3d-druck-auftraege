@@ -335,9 +335,12 @@
 
     <div class="card">
       <h3>Material &amp; Farbe</h3>
-      <p class="sub">Nur Bambu-Lab-Farben — die Wahl legt Material und Farbe zusammen fest.</p>
+      <p class="sub">PLA für innen, PETG für draußen — die Wahl legt Material und Farbe zusammen fest.</p>
       <div id="paletteGroups"></div>
       <div class="colorname">Gewählt: <b id="cName">–</b> <span class="muted" id="cHex" style="color:var(--muted)"></span></div>
+      <p class="sub" style="margin-top:12px">Du hättest gern eine andere Farbe oder ein anderes
+        Material? Schreib es unten in die Notizen — wir melden uns bei dir und klären, was
+        möglich ist.</p>
     </div>
 
   </div>
@@ -355,44 +358,18 @@
 // price = EU-Straßenpreis €/kg je Linie (Stand 20. Juli 2026, via Preisvergleich für den
 // Bambu-Lab-EU-Store recherchiert — Normalfarbe, ohne Rabatt/Refill/Mengenrabatt). dens/speed
 // = Materialwerte der Linie (speed relativ zu PLA Basic = 1,0), grobe Richtwerte.
+// Bewusst klein gehalten: nur was ohne Rueckfrage lieferbar ist. Weitere Farben und
+// Materialien gibt es auf Anfrage — der Kunde schreibt den Wunsch in die Notizen, Jan
+// meldet sich. Die volle Palette (7 Linien, ~90 Farben) steht weiterhin in backend.html.
 const PALETTE_LINES = [
   { line:"PLA Basic", price:22.99, dens:1.24, speed:1.00, colors:[
-    ["Jade White","#FFFFFF"],["Beige","#F7E6DE"],["Light Gray","#D1D3D5"],["Silver","#A6A9AA"],["Gray","#8E9089"],
-    ["Magenta","#EC008C"],["Pink","#F55A74"],["Hot Pink","#F5547C"],["Orange","#FF6A13"],["Pumpkin Orange","#FF9016"],
-    ["Gold","#E4BD68"],["Sunflower Yellow","#FEC600"],["Yellow","#F4EE2A"],["Bright Green","#BECF00"],["Bambu Green","#00AE42"],
-    ["Mistletoe Green","#3F8E43"],["Bronze","#847D48"],["Cocoa Brown","#6F5034"],["Brown","#9D432C"],["Maroon Red","#9D2235"],
-    ["Red","#C12E1F"],["Turquoise","#00B1B7"],["Cyan","#0086D6"],["Blue","#0A2989"],["Cobalt Blue","#0056B8"],
-    ["Purple","#5E43B7"],["Indigo Purple","#482960"],["Blue Grey","#5B6579"],["Dark Gray","#545454"],["Black","#000000"]
-  ]},
-  { line:"PLA Matte", price:22.99, dens:1.24, speed:1.00, colors:[
-    ["Ivory White","#FFFFFF"],["Bone White","#CBC6B8"],["Desert Tan","#E8DBB7"],["Latte Brown","#D3B7A7"],
-    ["Caramel","#AE835B"],["Terracotta","#B15533"],["Dark Brown","#7D6556"],["Dark Chocolate","#4D3324"],
-    ["Lilac Purple","#AE96D4"],["Sakura Pink","#E8AFCF"],["Mandarin Orange","#F99963"],["Lemon Yellow","#F7D959"],
-    ["Plum","#950051"],["Scarlet Red","#DE4343"],["Dark Red","#BB3D43"],["Dark Green","#68724D"],
-    ["Grass Green","#61C680"],["Apple Green","#C2E189"],["Ice Blue","#A3D8E1"],["Sky Blue","#56B7E6"],
-    ["Marine Blue","#0078BF"],["Dark Blue","#042F56"],["Ash Gray","#9B9EA0"],["Nardo Gray","#757575"],
-    ["Charcoal","#000000"]
-  ]},
-  { line:"PLA-CF", price:29.90, dens:1.20, speed:0.85, colors:[
-    ["Burgundy Red","#951E23"],["Iris Purple","#69398E"],["Matcha Green","#5C9748"],
-    ["Jeans Blue","#6E88BC"],["Royal Blue","#2842AD"],["Lava Gray","#4D5054"],["Black","#000000"]
-  ]},
-  { line:"PLA Translucent", price:25.95, dens:1.24, speed:0.90, colors:[
-    ["Teal","#009FA1"],["Light Jade","#96D8AF"],["Blue","#0047BB"],["Mellow Yellow","#F5DBAB"],["Purple","#8344B0"],
-    ["Cherry Pink","#F5B6CD"],["Orange","#F74E02"],["Ice Blue","#B8CDE9"],["Red","#B50011"],["Lavender","#B8ACD6"]
-  ]},
-  { line:"PLA Pure", price:27.99, dens:1.24, speed:1.00, colors:[
-    ["Pure White","#FFFFFF"],["Absolute Black","#000000"],["Baby Blue","#A4DBE8"],["Milky Pink","#F7CED7"],["Apricot","#FFB673"]
+    ["Jade White","#FFFFFF"],["Gray","#8E9089"],["Black","#000000"]
   ]},
   { line:"PETG Basic", price:25.99, dens:1.27, speed:0.85, colors:[
-    ["Red","#D6001C"],["Yellow","#FCE300"],["Reflex Blue","#001489"],["Black","#000000"],
-    ["Gray","#7F7E83"],["Dark Brown","#4F2C1D"],["White","#FFFFFF"]
+    ["White","#FFFFFF"],["Gray","#7F7E83"],["Black","#000000"]
   ]},
-  { line:"PETG-CF", price:32.99, dens:1.25, speed:0.80, colors:[
-    ["Brick Red","#9F332A"],["Violet Purple","#583061"],["Indigo Blue","#324585"],
-    ["Malachite Green","#16B08E"],["Black","#000000"],["Titan Gray","#565656"]
-  ]}
 ];
+
 const PALETTE = PALETTE_LINES.flatMap(g =>
   g.colors.map(([n,c]) => ({n, c, line:g.line, price:g.price, dens:g.dens, speed:g.speed})));
 

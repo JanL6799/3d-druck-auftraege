@@ -26,7 +26,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 45 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 47 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `tests/server.mjs` | 35 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
@@ -681,6 +681,22 @@ Datei — Parser, Vorschau, Volumen und Kalkulation bleiben unverändert.
   `// angenommen, bitte prüfen`.
 - OpenSCAD 2021.01 aus Debian, rendert headless ohne X-Server (geprüft). Zieht allerdings
   den Qt-Stack mit, 84 Pakete.
+
+### Reduzierte Palette auf der öffentlichen Seite
+
+`index.html` zeigt seit dem 04.09.2026 nur noch **PLA Basic** und **PETG Basic**, je in Weiß,
+Grau und Schwarz — sechs Farbfelder statt rund 90. Alles, was ohne Rückfrage lieferbar ist.
+
+Sonderwünsche laufen über die Notizen: unter der Farbauswahl steht ein Hinweis, dass Jan sich
+meldet und klärt, was möglich ist. Bewusst kein zusätzliches Formularfeld — das Notizfeld gibt
+es längst und geht mit der Mail raus.
+
+**`backend.html` behält die volle Palette** (7 Linien, ~90 Farben). Jan muss mit dem
+kalkulieren, was er tatsächlich einkauft; die öffentliche Liste ist eine Teilmenge davon, ein
+Auftrag aus dem Frontend löst im Backend also immer sauber auf. Ein E2E-Test hält beides fest.
+
+Nebenwirkung: Die Palette geht bei `/api/ai-suggest` und `/api/model` mit dem Request raus —
+die KI schlägt damit automatisch nur noch aus diesen sechs Farben vor.
 
 ### Foto zu Modell (öffentlich) — `POST /api/model`
 
