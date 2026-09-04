@@ -37,7 +37,6 @@ const AI_PER_IP_HOUR    = 10;
 const AI_PER_DAY        = 200;
 const AI_DESC_MAX       = 1000;
 
-fs.mkdirSync(DIR, { recursive: true });
 
 function readBody(req, maxBody){
   return new Promise((resolve, reject) => {
@@ -374,6 +373,10 @@ const server = http.createServer((req, res) => {
 });
 
 if (require.main === module){
+  // Erst beim echten Start anlegen, nicht schon beim Import: tests/server.mjs bindet dieses
+  // Modul nur ein, um die reinen Funktionen zu pruefen, und darf an /var/backups nicht
+  // scheitern (in der CI gehoert das Verzeichnis dem Runner nicht).
+  fs.mkdirSync(DIR, { recursive: true });
   server.listen(PORT, "127.0.0.1", () => {
     console.log("API-Server läuft auf 127.0.0.1:"+PORT+" (/backup, /send-mail, /calcbase, /ai-suggest), Ablage: "+DIR);
   });
