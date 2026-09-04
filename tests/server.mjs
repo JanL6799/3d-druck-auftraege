@@ -130,6 +130,47 @@ test('effort geht an Opus, aber nicht an Haiku (Haiku lehnt es mit 400 ab)', () 
   assert.equal(api.buildRequestBody('x', PAL, 'claude-haiku-4-5').output_config.effort, undefined);
 });
 
+/* ---------- Modell aus Beschreibung ---------- */
+
+test('SCAD-Schema verlangt Skript, Namen und Begründung', () => {
+  const sc = api.scadSchema();
+  assert.deepEqual(sc.required, ['scad','name','reason']);
+  assert.equal(sc.additionalProperties, false);
+});
+
+test('SCAD-Request setzt Modell und Schema, effort nicht an Haiku', () => {
+  const b = api.buildScadRequestBody('Distanzhülse 10 mm', 'claude-opus-5');
+  assert.equal(b.output_config.format.type, 'json_schema');
+  assert.equal(b.output_config.effort, 'low');
+  assert.equal(api.buildScadRequestBody('x', 'claude-haiku-4-5').output_config.effort, undefined);
+});
+
+test('SCAD-Prompt verlangt benannte Variablen und verbietet Dateizugriff', () => {
+  const p = api.scadSystemPrompt();
+  assert.match(p, /benannten Variablen/);
+  assert.match(p, /keine include-, use-, import- oder surface-Anweisungen/);
+});
+
+test('Harmloses Skript wird durchgelassen', () => {
+  assert.equal(api.sanitizeScad('hoehe = 10; // mm\ncylinder(h=hoehe, r=5, $fn=48);'), null);
+});
+
+test('Dateizugriff wird abgelehnt', () => {
+  for (const böse of [
+    'include <MCAD/gears.scad>\ncube(10);',
+    'use <lib.scad>\ncube(10);',
+    'import("/etc/passwd");',
+    'surface(file="/etc/shadow");',
+  ]) assert.match(api.sanitizeScad(böse) || '', /Dateizugriff/, böse);
+});
+
+test('Leeres und überlanges Skript werden abgelehnt', () => {
+  assert.match(api.sanitizeScad('') || '', /kein Skript/);
+  assert.match(api.sanitizeScad('   ') || '', /kein Skript/);
+  assert.match(api.sanitizeScad(undefined) || '', /kein Skript/);
+  assert.match(api.sanitizeScad('cube(1);'.repeat(4000)) || '', /unplausibel lang/);
+});
+
 for (const [s, n] of results) console.log(s, n);
 if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);

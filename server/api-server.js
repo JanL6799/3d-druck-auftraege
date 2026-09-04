@@ -15,6 +15,8 @@
 // X-Backup-Secret ist kein echtes Geheimnis (steht im Client-Quelltext), sondern nur eine
 // Hürde gegen zufälliges Abgreifen durch Bots, die die Domain sonst finden.
 const http = require("http");
+const os = require("os");
+const { execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -36,6 +38,8 @@ const MAX_BODY_AI       = 64 * 1024;   // Beschreibung + Palette, mehr braucht e
 const AI_PER_IP_HOUR    = 10;
 const AI_PER_DAY        = 200;
 const AI_DESC_MAX       = 1000;
+const SCAD_TIMEOUT_MS   = 20000;         // ein Pi 4 rendert einfache CSG in Sekunden
+const SCAD_MAX_STL      = 20*1024*1024;  // groesser wird kein parametrisches Teil
 
 
 function readBody(req, maxBody){
@@ -290,6 +294,179 @@ async function callAnthropic(body){
   }
   throw new Error("Anthropic ist gerade überlastet.");
 }
+/* ---------- Modell aus Beschreibung (OpenSCAD) ---------- */
+
+function scadSchema(){
+  return {
+    type: "object",
+    properties: {
+      scad:   { type: "string" },
+      name:   { type: "string" },
+      reason: { type: "string" }
+    },
+    required: ["scad","name","reason"],
+    additionalProperties: false
+  };
+}
+
+function scadSystemPrompt(){
+  return [
+    "Du schreibst OpenSCAD-Skripte fuer eine kleine 3D-Druckerei.",
+    "Der Kunde beschreibt ein Teil in Alltagssprache. Erzeuge daraus ein druckbares Modell.",
+    "",
+    "Regeln:",
+    "- Beginne mit benannten Variablen fuer alle Masse, eine pro Zeile, mit Kommentar und Einheit in mm.",
+    "  So kann der Drucker eine Zahl aendern, statt neu zu beschreiben.",
+    "- Nenne fehlende Masse nicht als Frage, sondern waehle einen ueblichen Wert und schreib ihn",
+    "  als Kommentar an die Variable, zum Beispiel // angenommen, bitte pruefen",
+    "- Nur reines OpenSCAD: keine include-, use-, import- oder surface-Anweisungen, keine externen Dateien.",
+    "- Halte es einfach: Quader, Zylinder, Kugeln, hull, minkowski, difference, union.",
+    "  Keine Schleifen mit mehr als ein paar hundert Durchlaeufen.",
+    "- $fn hoechstens 64, sonst dauert das Rendern zu lange.",
+    "- Druckbar denken: keine hauchduennen Waende (mindestens 1.2 mm), flache Standflaeche.",
+    "",
+    "name: kurzer Dateiname ohne Endung, klein, mit Bindestrichen.",
+    "reason: ein bis zwei Saetze auf Deutsch, was du gebaut und welche Masse du angenommen hast."
+  ].join("\n");
+}
+
+function buildScadRequestBody(description, model = ANTHROPIC_MODEL){
+  const body = {
+    model,
+    max_tokens: 8000,
+    system: scadSystemPrompt(),
+    messages: [{ role: "user", content: description }],
+    output_config: { format: { type: "json_schema", schema: scadSchema() } }
+  };
+  if (!/haiku/i.test(model)) body.output_config.effort = "low";
+  return body;
+}
+
+// Das Skript kommt vom Modell und wird auf dem Pi ausgefuehrt — also nur reine Geometrie
+// durchlassen. OpenSCAD kann sonst ueber include/use/import/surface Dateien vom Server lesen.
+const SCAD_VERBOTEN = /\b(include|use|import|surface|dxf_linear_extrude|dxf_rotate_extrude)\b|<[^>]*>/;
+
+function sanitizeScad(code){
+  if (typeof code !== "string" || !code.trim()) return "Das Modell hat kein Skript geliefert.";
+  if (code.length > 20000) return "Das Skript ist unplausibel lang.";
+  if (SCAD_VERBOTEN.test(code)) return "Das Skript enthaelt nicht erlaubte Anweisungen (Dateizugriff).";
+  return null;
+}
+
+// Rendert in einem eigenen Temp-Verzeichnis mit hartem Zeitlimit. Ein Skript mit
+// Endlosschleife wuerde sonst dauerhaft einen Kern belegen.
+function renderScad(code){
+  return new Promise((resolve, reject) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scad-"));
+    const src = path.join(dir, "m.scad"), out = path.join(dir, "m.stl");
+    const aufraeumen = () => { try { fs.rmSync(dir, {recursive:true, force:true}); } catch {} };
+    fs.writeFileSync(src, code);
+    execFile("openscad", ["-o", out, src], {timeout: SCAD_TIMEOUT_MS}, (err, stdout, stderr) => {
+      if (err){
+        aufraeumen();
+        console.error("OpenSCAD-Fehler:", err.killed ? "Zeitlimit" : err.message, String(stderr).slice(0,500));
+        reject(new Error(err.killed
+          ? "Das Rendern hat zu lange gedauert. Bitte beschreib ein einfacheres Teil."
+          : "OpenSCAD konnte das Skript nicht uebersetzen."));
+        return;
+      }
+      let stl;
+      try {
+        const groesse = fs.statSync(out).size;
+        if (groesse > SCAD_MAX_STL) throw new Error("Das erzeugte Modell ist zu gross.");
+        if (groesse === 0) throw new Error("OpenSCAD hat eine leere Datei erzeugt.");
+        stl = fs.readFileSync(out);
+      } catch (e){ aufraeumen(); reject(e); return; }
+      aufraeumen();
+      resolve(stl);
+    });
+  });
+}
+
+async function handleScad(req, res){
+  const limitError = rateLimitCheck(clientIp(req));
+  if (limitError){
+    res.writeHead(429, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:limitError}));
+    return;
+  }
+  const body = await readBody(req, MAX_BODY_AI);
+  let payload;
+  try { payload = JSON.parse(body); }
+  catch { res.writeHead(400); res.end("Ungueltiges JSON"); return; }
+
+  // Zweiter Weg: fertiges Skript neu rendern, nachdem eine Zahl geaendert wurde.
+  // Kein API-Aufruf, kostet nichts — deshalb ist das Bearbeiten der Masse der Normalfall
+  // und nicht das erneute Beschreiben.
+  if (typeof payload.scad === "string" && payload.scad.trim()){
+    const schlecht = sanitizeScad(payload.scad);
+    if (schlecht){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:schlecht}));
+      return;
+    }
+    try {
+      const stl = await renderScad(payload.scad);
+      res.writeHead(200, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:true,
+        name:   String(payload.name || "modell").replace(/[^a-z0-9-]/gi, "").slice(0,60) || "modell",
+        scad:   payload.scad,
+        reason: "Aus dem bearbeiteten Skript gerendert.",
+        stl:    stl.toString("base64")
+      }));
+    } catch (e){
+      res.writeHead(502, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:"Das Rendern hat nicht geklappt: " + e.message}));
+    }
+    return;
+  }
+
+  const description = typeof payload.description === "string" ? payload.description.trim() : "";
+  if (!description || description.length > AI_DESC_MAX){
+    res.writeHead(400, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:`Beschreibung fehlt oder ist laenger als ${AI_DESC_MAX} Zeichen.`}));
+    return;
+  }
+  if (!ANTHROPIC_API_KEY){
+    res.writeHead(500, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt."}));
+    return;
+  }
+
+  try {
+    const data = await callAnthropic(buildScadRequestBody(description));
+    if (data.stop_reason === "refusal"){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:"Zu dieser Beschreibung gibt es kein Modell. Bitte formuliere sie anders."}));
+      return;
+    }
+    if (data.stop_reason === "max_tokens")
+      throw new Error("Die Antwort wurde abgeschnitten. Bitte beschreib ein einfacheres Teil.");
+    const block = (data.content || []).find(b => b.type === "text");
+    if (!block) throw new Error("Antwort ohne Textblock.");
+    const s = JSON.parse(block.text);
+
+    const schlecht = sanitizeScad(s.scad);
+    if (schlecht){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:schlecht}));
+      return;
+    }
+
+    const stl = await renderScad(s.scad);
+    res.writeHead(200, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:true,
+      name:   String(s.name || "modell").replace(/[^a-z0-9-]/gi, "").slice(0, 60) || "modell",
+      scad:   s.scad,
+      reason: String(s.reason || "").trim().slice(0, 500),
+      stl:    stl.toString("base64")
+    }));
+  } catch (e){
+    res.writeHead(502, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"Das Modell hat nicht geklappt: " + e.message}));
+  }
+}
+
 async function handleAiSuggest(req, res){
   const limitError = rateLimitCheck(clientIp(req));
   if (limitError){
@@ -358,6 +535,7 @@ const ROUTES = {
   "GET /calcbase":    handleGetCalcbase,
   "POST /calcbase":   handlePostCalcbase,
   "POST /ai-suggest": handleAiSuggest,
+  "POST /scad":       handleScad,
 };
 
 const server = http.createServer((req, res) => {
@@ -384,4 +562,5 @@ if (require.main === module){
 
 // Für die Tests (tests/server.mjs) — beim Einbinden als Modul startet oben kein Listener.
 module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit,
-                   buildSchema, systemPrompt, buildRequestBody };
+                   buildSchema, systemPrompt, buildRequestBody,
+                   scadSchema, scadSystemPrompt, buildScadRequestBody, sanitizeScad };

@@ -26,8 +26,8 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 37 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
-| `tests/server.mjs` | 19 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
+| `tests/e2e.mjs` | 40 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/server.mjs` | 25 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -655,6 +655,32 @@ DEV_API=http://127.0.0.1:8182 npm run dev    # zweites Terminal, dann http://127
 
 Ohne den `DEV_API`-Schalter proxyt der Dev-Server still gegen Produktion und man testet die
 deployte statt der neuen Version.
+
+### Modell aus Beschreibung (OpenSCAD)
+
+`POST /api/scad` — **nur im Heimnetz**, bewusst nicht auf der öffentlichen Seite. Dahinter
+wird generierter Code auf dem Pi ausgeführt; das gehört nicht an einen offenen Endpunkt.
+
+Claude schreibt ein parametrisches OpenSCAD-Skript, der Pi rendert es mit `openscad -o`
+zu STL, der Client schiebt das Ergebnis durch dieselbe `loadFile()`-Kette wie eine abgelegte
+Datei — Parser, Vorschau, Volumen und Kalkulation bleiben unverändert.
+
+- **Zwei Wege in dieselbe Route.** Mit `description` fragt der Server die KI und rendert.
+  Mit `scad` rendert er nur — kein API-Aufruf, kostet nichts. Das ist der Normalfall beim
+  Nachjustieren: eine Zahl im Skript ändern und neu rendern, statt neu zu beschreiben.
+  Deshalb verlangt der Prompt benannte Variablen mit Einheit ganz oben.
+- **Sanitizer, nicht wegzukürzen.** `include`, `use`, `import`, `surface` und alles in
+  spitzen Klammern werden abgelehnt, bevor OpenSCAD startet — sonst könnte ein generiertes
+  Skript Dateien vom Pi lesen. Sechs Tests decken das ab.
+- **Zeitlimit 20 s**, eigenes `mkdtemp`-Verzeichnis, das danach restlos verschwindet.
+  Gemessen: eine Minkowski-Summe läuft zuverlässig ins Limit, ohne verwaisten Prozess.
+- **Grenzen des Verfahrens:** taugt für Geometrie mit Maßen (Hülsen, Winkel, Halter,
+  Platten). Für Figuren und organische Formen ist OpenSCAD das falsche Werkzeug — dafür
+  bräuchte es einen Text-zu-3D-Dienst, bewusst nicht gebaut.
+- Fehlende Maße erfindet das Modell und markiert sie im Skript mit
+  `// angenommen, bitte prüfen`.
+- OpenSCAD 2021.01 aus Debian, rendert headless ohne X-Server (geprüft). Zieht allerdings
+  den Qt-Stack mit, 84 Pakete.
 
 ## Offene Punkte
 

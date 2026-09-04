@@ -57,6 +57,18 @@ for site in "${SITES[@]}"; do
     echo "   $(basename "$site"): Route ergaenzt."
   fi
 done
+
+# /api/scad bleibt bewusst auf die Heimnetz-Site beschraenkt, auch beim vollen Rollout:
+# dahinter wird generierter OpenSCAD-Code auf dem Pi ausgefuehrt. Das gehoert nicht
+# an einen oeffentlich erreichbaren Endpunkt.
+if [ -f "$SITE_LOKAL" ]; then
+  if grep -q '/api/scad' "$SITE_LOKAL"; then
+    echo "   backend-lokal: /api/scad existiert schon, uebersprungen."
+  else
+    sed -i '/location \/api\/send-mail/i\    location = /api/scad {\n        proxy_pass http://127.0.0.1:8181/scad;\n    }\n' "$SITE_LOKAL"
+    echo "   backend-lokal: /api/scad ergaenzt."
+  fi
+fi
 nginx -t
 
 echo "== 3/4: Seiten in die Webroots =="

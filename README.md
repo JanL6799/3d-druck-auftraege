@@ -39,6 +39,11 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
   nicht. Alles bleibt danach frei änderbar; das Feature schlägt vor, es entscheidet nicht.
   Braucht `ANTHROPIC_API_KEY` auf dem Server — fehlt er, funktioniert alles andere
   unverändert weiter.
+- **Modell erzeugen lassen (nur im Backend):** Ein einfaches Teil mit Maßen beschreiben
+  („Distanzhülse, außen 20 mm, innen 8 mm, 15 mm hoch") — die KI schreibt ein parametrisches
+  OpenSCAD-Skript, der Pi rendert es zu STL, und es landet direkt in Vorschau und
+  Kalkulation. Das Skript steht daneben und lässt sich nachjustieren: eine Zahl ändern,
+  neu rendern, kostenlos. Für Geometrie gedacht, nicht für Figuren.
 - **Kalkulation:** Material, Strom, Maschinenzeit, Rüsten, Marge, MwSt. — steht direkt
   oben im Blick, keine Plattformgebühr. Die Druckzeit-Schätzung lässt sich im Backend durch
   die echte Slicer-Zeit übersteuern.
