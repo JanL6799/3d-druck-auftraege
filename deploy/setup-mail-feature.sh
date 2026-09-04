@@ -38,6 +38,9 @@ fi
 # der Secret-Wert steckt schon im ausgelieferten index.html und muss identisch bleiben.
 CURRENT_SECRET=$(grep -oP '(?<=Environment=BACKUP_SECRET=).*' "$UNIT")
 CURRENT_DIR=$(grep -oP '(?<=Environment=BACKUP_DIR=).*' "$UNIT")
+# Ebenso die ANTHROPIC_*-Zeilen, die setup-ki-vorschlag.sh gesetzt hat — dieses Skript
+# schreibt die Unit komplett neu und wuerde sie sonst stillschweigend loeschen.
+CURRENT_ANTHROPIC=$(grep -E '^Environment=ANTHROPIC_' "$UNIT" || true)
 
 cat > "$UNIT" <<EOF
 [Unit]
@@ -51,6 +54,7 @@ Environment=BACKUP_DIR=$CURRENT_DIR
 Environment=RESEND_API_KEY=$RESEND_API_KEY
 Environment=MAIL_TO=jan@luetje.me
 Environment=N8N_ORDER_HOOK=http://127.0.0.1:5678/webhook/new-order
+$CURRENT_ANTHROPIC
 Restart=on-failure
 User=jan
 

@@ -32,6 +32,13 @@ zusätzlich bei Bedarf hinter einem Pfeil, damit der Kopf der Seite aufgeräumt 
   Bambu Studio), eigene 3D-Vorschau (Canvas-Software-Renderer). Warnt bei nicht
   wasserdichten Meshes und bei Teilen, die den eingestellten Bauraum sprengen
   (90°-Drehung wird berücksichtigt).
+- **KI-Vorschlag (öffentliche Seite):** Der Kunde beschreibt sein Vorhaben in einem Satz
+  („Halterung fürs Fahrrad, muss Regen abkönnen") und bekommt Material, Farbe, Infill,
+  Schichthöhe und Wandstärke vorgeschlagen — samt Begründung in Alltagssprache. Der größte
+  Nutzen liegt beim Material: dass PLA in der Sonne weich wird und PETG nicht, weiß ein Laie
+  nicht. Alles bleibt danach frei änderbar; das Feature schlägt vor, es entscheidet nicht.
+  Braucht `ANTHROPIC_API_KEY` auf dem Server — fehlt er, funktioniert alles andere
+  unverändert weiter.
 - **Kalkulation:** Material, Strom, Maschinenzeit, Rüsten, Marge, MwSt. — steht direkt
   oben im Blick, keine Plattformgebühr. Die Druckzeit-Schätzung lässt sich im Backend durch
   die echte Slicer-Zeit übersteuern.
