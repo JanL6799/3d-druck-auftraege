@@ -77,7 +77,7 @@
     .wrap > div{display:contents}
     .card{margin-bottom:0}
     #cardFile{order:1} #cardGen{order:2} #cardMaterial{order:3} #cardSettings{order:4}
-    #cardCalc{order:5} #cardWish{order:6} #cardNotes{order:7} #cardContact{order:8}
+    #cardCalc{order:5} #cardNotes{order:6} #cardContact{order:7}
   }
 
   .card{background:var(--panel);border-radius:var(--r);padding:26px;margin-bottom:22px;box-shadow:var(--shadow)}
@@ -261,15 +261,6 @@
       <div class="warnbox" id="warn"></div>
     </div>
 
-    <div class="card" id="cardWish">
-      <h3>Beschreib dein Vorhaben</h3>
-      <p class="sub">Ein Satz genügt — wir schlagen Material, Farbe und Einstellungen vor. Ändern kannst du alles danach noch.</p>
-      <textarea id="aiWish" rows="2" placeholder="z. B. Halterung fürs Fahrrad, muss Regen abkönnen"></textarea>
-      <div class="stack" style="margin-top:10px">
-        <button id="btnAi">Vorschlag holen</button>
-      </div>
-      <div class="hint" id="aiOut" style="display:none"></div>
-    </div>
 
     <div class="card" id="cardSettings">
       <h3>Druckeinstellungen</h3>
@@ -396,7 +387,6 @@ const STORE_KEY = "druckauftrag.v2";
 // Quelltext dieser Seite — sondern nur eine Hürde gegen zufälliges Abgreifen durch Bots.
 const MAIL_API_URL = "/api/send-mail";
 const CALCBASE_API_URL = "/api/calcbase";
-const AI_API_URL = "/api/ai-suggest";
 const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
 
 // Die Kalkulationsbasis (Strompreis, Maschine €/h, Marge, Bauraum …) wird nur im Backend
@@ -937,59 +927,7 @@ $("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; ren
 $("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
 ["walls","qty","scale","ship"].forEach(id => $(id).addEventListener("input", render));
 
-/* ---------- KI-Vorschlag ---------- */
-// Der Server kennt die Palette nicht — sie lebt hier in PALETTE_LINES. Sie geht mit dem
-// Request raus und der zurückgelieferte Farbname wird hier gegen sie aufgelöst. So gibt es
-// genau eine Quelle der Wahrheit für Materialien und Farben.
-function applySuggestion(s){
-  const line = PALETTE_LINES.find(g => g.line === s.line) || PALETTE_LINES[0];
-  const name = String(s.color || "").toLowerCase();
-  const hit  = line.colors.find(([n]) => n.toLowerCase() === name) || line.colors[0];
-  const found = PALETTE.find(o => o.n === hit[0] && o.line === line.line);
-  if (found){ color = {...found}; drawSwatches(); }
 
-  // .value zu setzen löst kein Event aus — ohne dispatchEvent bleiben Label und Preis stehen.
-  const set = (id, v) => { const el = $(id); el.value = String(v); el.dispatchEvent(new Event("input", {bubbles:true})); };
-  set("infill", s.infill);
-  set("layer",  s.layer);
-  set("walls",  s.walls);
-
-  if (s.notes){
-    const n = $("notes");
-    n.value = n.value ? n.value + "\n" + s.notes : s.notes;   // nie überschreiben
-  }
-  render();
-}
-
-async function requestSuggestion(){
-  const wish = $("aiWish").value.trim();
-  const out = $("aiOut");
-  const btn = $("btnAi");
-  out.style.display = "block";
-  if (!wish){ out.textContent = "Bitte beschreib kurz, was du drucken lassen willst."; return; }
-
-  btn.disabled = true;
-  out.textContent = "Einen Moment …";
-  try {
-    const res = await fetch(AI_API_URL, {
-      method: "POST",
-      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
-      body: JSON.stringify({
-        description: wish,
-        palette: PALETTE_LINES.map(g => ({ line: g.line, colors: g.colors.map(([n]) => n) }))
-      })
-    });
-    const data = await res.json();
-    if (!data.ok){ out.textContent = data.error || "Das hat nicht geklappt."; return; }
-    applySuggestion(data.suggestion);
-    out.textContent = data.suggestion.reason || "Vorschlag übernommen.";
-  } catch (e){
-    out.textContent = "Der Vorschlag ist gerade nicht erreichbar. Stell die Werte einfach von Hand ein.";
-  } finally {
-    btn.disabled = false;
-  }
-}
-$("btnAi").onclick = requestSuggestion;
 
 /* ---------- Foto hochladen und Modell erzeugen ---------- */
 // Das Bild wird vor dem Hochladen im Browser verkleinert: spart Upload, Token und Wartezeit.

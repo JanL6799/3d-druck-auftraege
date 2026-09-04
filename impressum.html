@@ -75,9 +75,13 @@
        Preis, ggf. Notizen) sowie die von dir hochgeladene 3D-Modelldatei. Deine E-Mail-Adresse
        wird ausschließlich für diesen Versand verwendet — sie wird nicht im Browser gespeichert,
        auch nicht durch die Funktion „Stand speichern".</p>
-    <p>Nutzt du „Foto hochladen statt Datei", übermittelst du zusätzlich das ausgewählte Bild
-       und deine Beschreibung an unseren Server, der beides zur Prüfung und Modellerzeugung an
-       Anthropic weitergibt (siehe unten). Das Bild wird dabei nicht gespeichert.</p>
+    <p>Nutzt du „Modell erzeugen lassen", übermittelst du eine Beschreibung und — freiwillig —
+       ein Foto an unseren Server. Er gibt beides zur automatisierten Prüfung und zur
+       Modellerzeugung an Anthropic weiter (siehe unten) und schickt dir das erzeugte 3D-Modell
+       zurück. <strong>Weder das Foto noch die Beschreibung werden bei uns gespeichert</strong> —
+       sie werden nur für diese eine Anfrage verarbeitet und danach verworfen. Das erzeugte
+       Modell verbleibt lokal in deinem Browser, bis du es per „Per Mail senden" aktiv an uns
+       schickst.</p>
   </div>
 
   <div class="card">
@@ -89,18 +93,20 @@
 
   <div class="card">
     <h2>Empfänger — KI-Funktionen über Anthropic</h2>
-    <p>Für die Vorschläge zu Druckeinstellungen und für „Foto hochladen statt Datei" nutzen wir
-       die API von <a href="https://www.anthropic.com" target="_blank" rel="noopener">Anthropic</a>
-       (Anthropic PBC, USA) als Auftragsverarbeiter. Übermittelt werden dabei nur die von dir
-       eingegebene Beschreibung und — wenn du diese Funktion nutzt — das von dir ausgewählte
-       Foto. Dabei kann es zu einer Datenübermittlung in die USA kommen.</p>
-    <p><strong>Fotos werden bei uns nicht gespeichert.</strong> Sie werden ausschließlich für
-       die Prüfung und die Modellerzeugung dieser einen Anfrage verarbeitet und danach
-       verworfen — weder auf dem Server abgelegt noch in Sicherungen aufgenommen.</p>
-    <p>Vor der Verarbeitung prüfen wir automatisiert, ob das Bild geeignet ist. Fotos, auf denen
-       Personen erkennbar sind, werden abgelehnt und nicht weiterverarbeitet. <strong>Bitte
-       fotografiere ausschließlich den Gegenstand</strong>, den du gedruckt haben möchtest, und
-       lade keine Bilder anderer Personen hoch.</p>
+    <p>Für „Modell erzeugen lassen" nutzen wir die API von
+       <a href="https://www.anthropic.com" target="_blank" rel="noopener">Anthropic</a>
+       (Anthropic PBC, USA) als Auftragsverarbeiter. Übermittelt werden deine Beschreibung und —
+       falls du eines auswählst — dein Foto. Dabei kann es zu einer Datenübermittlung in die USA
+       kommen.</p>
+    <p><strong>Foto und Beschreibung werden bei uns nicht gespeichert.</strong> Sie werden
+       ausschließlich für die Prüfung und die Modellerzeugung dieser einen Anfrage verarbeitet
+       und danach verworfen — weder auf dem Server abgelegt noch in Sicherungen aufgenommen.
+       Auch bei Anthropic werden über die API übermittelte Inhalte nicht zum Training von
+       Modellen verwendet.</p>
+    <p>Vor der Modellerzeugung prüfen wir jedes Foto und jede Beschreibung automatisiert. Fotos,
+       auf denen Personen erkennbar sind, sowie anstößige Inhalte werden abgelehnt und nicht
+       weiterverarbeitet. <strong>Bitte fotografiere ausschließlich den Gegenstand</strong>, den
+       du gedruckt haben möchtest, und lade keine Bilder anderer Personen hoch.</p>
     <p>Weitere Informationen in der <a href="https://www.anthropic.com/legal/privacy"
        target="_blank" rel="noopener">Datenschutzerklärung von Anthropic</a>.</p>
   </div>

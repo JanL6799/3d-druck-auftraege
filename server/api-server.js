@@ -706,74 +706,11 @@ async function handleModel(req, res){
   }
 }
 
-async function handleAiSuggest(req, res){
-  const limitError = rateLimitCheck(clientIp(req));
-  if (limitError){
-    res.writeHead(429, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:false, error:limitError}));
-    return;
-  }
-
-  const body = await readBody(req, MAX_BODY_AI);
-  let payload;
-  try { payload = JSON.parse(body); }
-  catch { res.writeHead(400); res.end("Ungültiges JSON"); return; }
-
-  const description = typeof payload.description === "string" ? payload.description.trim() : "";
-  if (!description || description.length > AI_DESC_MAX){
-    res.writeHead(400, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:false, error:`Beschreibung fehlt oder ist länger als ${AI_DESC_MAX} Zeichen.`}));
-    return;
-  }
-  if (!validPalette(payload.palette)){
-    res.writeHead(400, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:false, error:"palette fehlt oder hat das falsche Format."}));
-    return;
-  }
-
-  if (!ANTHROPIC_API_KEY){
-    res.writeHead(500, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:false, error:"ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt."}));
-    return;
-  }
-
-  try {
-    const data = await callAnthropic(buildRequestBody(description, payload.palette));
-    if (data.stop_reason === "refusal"){
-      res.writeHead(422, {"Content-Type":"application/json"});
-      res.end(JSON.stringify({ok:false, error:"Zu dieser Beschreibung gibt es keinen Vorschlag. Bitte formuliere sie anders."}));
-      return;
-    }
-    // Bei max_tokens ist die Antwort mitten im JSON abgeschnitten. Ohne eigenen Zweig
-    // scheitert erst JSON.parse und der Kunde bekäme eine Parser-Meldung zu lesen.
-    if (data.stop_reason === "max_tokens")
-      throw new Error("Die Antwort wurde abgeschnitten. Bitte beschreibe dein Vorhaben kürzer.");
-    const block = (data.content || []).find(b => b.type === "text");
-    if (!block) throw new Error("Antwort ohne Textblock.");
-    const s = JSON.parse(block.text);
-
-    res.writeHead(200, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:true, suggestion:{
-      line:   s.line,
-      color:  s.color,                       // Prüfung macht der Client, dort liegt die Palette
-      infill: clampInfill(s.infill),
-      layer:  s.layer,
-      walls:  s.walls,
-      notes:  String(s.notes  || "").trim().slice(0, 500),
-      reason: String(s.reason || "").trim().slice(0, 500)
-    }}));
-  } catch (e){
-    res.writeHead(502, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:false, error:"Der Vorschlag hat nicht geklappt: " + e.message}));
-  }
-}
-
 const ROUTES = {
   "POST /backup":     handleBackup,
   "POST /send-mail":  handleSendMail,
   "GET /calcbase":    handleGetCalcbase,
   "POST /calcbase":   handlePostCalcbase,
-  "POST /ai-suggest": handleAiSuggest,
   "POST /scad":       handleScad,
   "POST /model":      handleModel,
 };
@@ -796,7 +733,7 @@ if (require.main === module){
   // scheitern (in der CI gehoert das Verzeichnis dem Runner nicht).
   fs.mkdirSync(DIR, { recursive: true });
   server.listen(PORT, "127.0.0.1", () => {
-    console.log("API-Server läuft auf 127.0.0.1:"+PORT+" (/backup, /send-mail, /calcbase, /ai-suggest), Ablage: "+DIR);
+    console.log("API-Server läuft auf 127.0.0.1:"+PORT+" (/backup, /send-mail, /calcbase, /scad, /model), Ablage: "+DIR);
   });
 }
 
