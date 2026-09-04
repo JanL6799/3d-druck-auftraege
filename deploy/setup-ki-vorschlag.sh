@@ -121,7 +121,11 @@ if [ "$NUR_BACKEND" -eq 1 ]; then
 else
   echo "Fertig. Öffentliche Seite und Heimnetz-Backend sind beide aktualisiert."
   echo
+  # Ohne X-Backup-Secret antwortet der Dienst mit 403 — der Wert steht im ausgelieferten
+  # index.html, ist also kein Geheimnis, muss aber mitgeschickt werden.
+  SEC=$(sed -n 's/^const BACKUP_SECRET = "\\(.*\\)";/\\1/p' "$REPO/index.html")
   echo "Kurztest:"
-  echo "  curl -s -X POST https://drucken.luetje.me/api/ai-suggest -H 'content-type: application/json' \\"
+  echo "  curl -s -X POST https://drucken.luetje.me/api/ai-suggest \\"
+  echo "    -H 'content-type: application/json' -H 'X-Backup-Secret: $SEC' \\"
   echo "    -d '{\"description\":\"Test\",\"palette\":[{\"line\":\"PLA Basic\",\"colors\":[\"Black\"]}]}'"
 fi
