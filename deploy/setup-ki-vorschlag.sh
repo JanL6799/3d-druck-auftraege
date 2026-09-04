@@ -3,6 +3,8 @@
 # nginx-Route /api/ai-suggest auf den Dienst, Webroot-Kopie von index.html.
 #
 # Ausführen mit: sudo bash deploy/setup-ki-vorschlag.sh
+#   Key und Modell werden, wenn vorhanden, aus ~/.config/druckauftrag/env des aufrufenden
+#   Nutzers gelesen; nur was dort fehlt, wird abgefragt.
 #   --nur-backend  lässt die öffentliche Seite komplett unangetastet: keine nginx-Route
 #                  auf drucken.luetje.me, keine index.html-Kopie. Zum Ausprobieren im
 #                  Heimnetz, bevor Kunden den Knopf sehen.
@@ -23,11 +25,25 @@ WEBROOT=/var/www/drucken.luetje.me
 SITE_LOKAL=/etc/nginx/sites-available/backend-lokal
 WEBROOT_LOKAL=/var/www/backend.druckauftrag
 
-read -rsp "Anthropic-API-Key (console.anthropic.com): " ANTHROPIC_API_KEY; echo
-[ -n "$ANTHROPIC_API_KEY" ] || { echo "Kein Key eingegeben, Abbruch." >&2; exit 1; }
+# Key und Modell bevorzugt aus der 0600-Datei des aufrufenden Nutzers lesen, damit sie
+# nicht bei jedem Lauf neu eingetippt werden muessen. Unter sudo ist $HOME /root, deshalb
+# ueber SUDO_USER. Fehlt die Datei, wird wie bisher gefragt.
+KEYFILE="/home/${SUDO_USER:-jan}/.config/druckauftrag/env"
+if [ -r "$KEYFILE" ]; then
+  set -a; . "$KEYFILE"; set +a
+  [ -n "${ANTHROPIC_API_KEY:-}" ] && echo "Key aus $KEYFILE uebernommen."
+  [ -n "${ANTHROPIC_MODEL:-}"   ] && echo "Modell aus $KEYFILE: ${ANTHROPIC_MODEL}"
+fi
 
-read -rp "Modell [claude-opus-5]: " ANTHROPIC_MODEL
-ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-opus-5}
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  read -rsp "Anthropic-API-Key (console.anthropic.com): " ANTHROPIC_API_KEY; echo
+  [ -n "$ANTHROPIC_API_KEY" ] || { echo "Kein Key eingegeben, Abbruch." >&2; exit 1; }
+fi
+
+if [ -z "${ANTHROPIC_MODEL:-}" ]; then
+  read -rp "Modell [claude-opus-5]: " ANTHROPIC_MODEL
+  ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-opus-5}
+fi
 # Modell-IDs schreiben sich durchgehend mit Bindestrich (claude-haiku-4-5, nicht -4.5).
 # Ein Punkt wird sonst kommentarlos uebernommen und faellt erst auf, wenn ein Kunde
 # "Anthropic antwortete mit HTTP 404" liest.
