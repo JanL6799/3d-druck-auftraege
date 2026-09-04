@@ -98,6 +98,32 @@ fi
 nginx -t
 
 echo "== 3/4: Seiten in die Webroots =="
+
+# impressum.html enthaelt im Repo nur Platzhalter — Name und Anschrift stehen bewusst nicht
+# im oeffentlichen GitHub-Repo, sondern in einer 0600-Datei auf dem Pi. Hier werden sie beim
+# Ausliefern eingesetzt. Ohne Fragment bricht der Deploy ab: eine Seite ohne Impressum nach
+# § 5 TMG darf nicht live gehen.
+FRAG="/home/${SUDO_USER:-jan}/.config/druckauftrag/impressum.html.frag"
+if [ ! -r "$FRAG" ]; then
+  echo "FEHLER: $FRAG fehlt — ohne Impressumsangaben wird nicht ausgeliefert." >&2
+  exit 1
+fi
+python3 - "$REPO/impressum.html" "$FRAG" "$WEBROOT/impressum.html" <<'PYEOF'
+import re, sys
+vorlage, frag, ziel = sys.argv[1], sys.argv[2], sys.argv[3]
+f = open(frag).read()
+tmg  = f.split("<!-- TMG -->")[1].split("<!-- MSTV -->")[0].strip()
+mstv = f.split("<!-- MSTV -->")[1].strip()
+s = open(vorlage).read()
+for marke, inhalt in (("TMG", tmg), ("MSTV", mstv)):
+    muster = r"    <!-- PLATZHALTER-%s:[^>]*-->\n    <p>Angaben werden beim Ausliefern eingesetzt\.</p>" % marke
+    s, n = re.subn(muster, lambda _m: inhalt, s, count=1)
+    if n != 1:
+        sys.exit("Platzhalter %s nicht gefunden — Impressum nicht ausgeliefert." % marke)
+open(ziel, "w").write(s)
+print("   impressum.html mit Angaben aus dem Fragment ausgeliefert.")
+PYEOF
+
 [ -d "$WEBROOT_LOKAL" ] && cp "$REPO/backend.html" "$WEBROOT_LOKAL/backend.html"
 if [ "$NUR_BACKEND" -eq 1 ]; then
   echo "   index.html übersprungen (--nur-backend)."

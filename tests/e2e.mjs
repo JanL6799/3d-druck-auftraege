@@ -479,9 +479,12 @@ await test('v1-Stand lädt (Migration) auch mit der kürzeren Feldliste von inde
   assert.equal(v1.qty, '3');
 });
 
-await test('index.html: Mail ist hervorgehoben und steht nach PDF, Backend-Blöcke fehlen, E-Mail-Feld ist Pflicht', async () => {
-  const order = await page.$$eval('header .stack button', els => els.map(el => el.id));
-  assert.ok(order.indexOf('btnPdf') < order.indexOf('btnMail'), 'PDF steht vor Mail');
+await test('index.html: Mail ist hervorgehoben und sitzt beim Kontakt, Backend-Blöcke fehlen, E-Mail-Feld ist Pflicht', async () => {
+  // Der Mail-Knopf ist aus der Kopfzeile in die Kontakt-Karte gewandert (04.09.2026):
+  // der Kunde tippt dort seine Adresse ein und findet den Knopf direkt darunter.
+  const kopf = await page.$$eval('header .stack button', els => els.map(el => el.id));
+  assert.ok(kopf.includes('btnPdf'), 'PDF bleibt im Kopf');
+  assert.ok(!kopf.includes('btnMail'), 'Mail nicht mehr im Kopf');
   assert.equal(await page.getAttribute('#btnPdf', 'class'), 'sm');
   assert.match(await page.getAttribute('#btnMail', 'class'), /primary/);
   for (const id of ['calcBaseBody', 'orderDataBody', 'ordersBody', 'modal'])
@@ -816,6 +819,50 @@ await test('Modell nur aus Text, ganz ohne Foto', async () => {
   assert.equal(call.image, undefined, 'ohne Foto darf kein image-Feld mitgehen');
   assert.equal(await text('#rVol'), '1,0 cm³');
   assert.match(await text('#fotoOut'), /nach Beschreibung/);
+});
+
+await test('Mobile Reihenfolge folgt der Kundenreise', async () => {
+  await page.setViewportSize({width:390, height:844});
+  const reihenfolge = await page.evaluate(() =>
+    [...document.querySelectorAll('.wrap .card')]
+      .map(el => [el.id, el.getBoundingClientRect().top])
+      .sort((a,b) => a[1] - b[1]).map(x => x[0]));
+  assert.deepEqual(reihenfolge,
+    ['cardFile','cardGen','cardMaterial','cardSettings','cardCalc','cardWish','cardNotes','cardContact']);
+  await page.setViewportSize({width:1280, height:900});
+});
+
+await test('Senden-Knopf steht in der Kontakt-Karte, nicht im Kopf', async () => {
+  const drin = await page.evaluate(() =>
+    document.getElementById('cardContact').contains(document.getElementById('btnMail')));
+  assert.equal(drin, true);
+  const imKopf = await page.evaluate(() =>
+    !!document.querySelector('header #btnMail'));
+  assert.equal(imKopf, false);
+});
+
+await test('Erzeugtes Modell lässt sich als STL herunterladen', async () => {
+  const stlText = boxSTL(20,20,20);
+  await page.evaluate(async ({stlText}) => {
+    fotoDaten = null;
+    const orig = window.fetch;
+    window.fetch = async (url) => {
+      if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
+      return { ok:true, json: async () => ({ok:true, name:'wuerfel', scad:'cube(20);',
+        reason:'Test.', stl: btoa(stlText) }) };
+    };
+    document.getElementById('fotoWish').value = 'Ein Würfel, 20 mm';
+    document.getElementById('btnFoto').click();
+    await new Promise(r => setTimeout(r, 700));
+    window.fetch = orig;
+  }, {stlText});
+  assert.notEqual(await page.$eval('#stlBox', el => el.style.display), 'none', 'Knopf muss auftauchen');
+
+  const dl = await Promise.all([
+    page.waitForEvent('download'),
+    page.click('#btnStl'),
+  ]);
+  assert.equal(dl[0].suggestedFilename(), 'wuerfel.stl');
 });
 
 await test('Keine JS-Fehler im gesamten Lauf', () => {

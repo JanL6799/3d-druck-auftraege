@@ -26,7 +26,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 48 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/e2e.mjs` | 51 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `tests/server.mjs` | 37 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
@@ -740,6 +740,34 @@ Bei Winkeln, Halterungen und Platten funktioniert das, bei Figuren und Tieren ni
 
 **Nebenbefund:** OpenSCAD exportiert headless nach STL, aber **PNG-Vorschauen brauchen OpenGL**
 und scheitern auf dem Pi mit „Unable to open a connection to the X server".
+
+### Impressumsangaben liegen nicht im Repo
+
+`impressum.html` enthält im Repo nur **Platzhalter** für die Angaben nach § 5 TMG und den
+Verantwortlichen nach § 18 Abs. 2 MStV. Die echten Werte stehen in
+`~/.config/druckauftrag/impressum.html.frag` (`0600`, außerhalb des Repos) und werden von
+`deploy/setup-ki-vorschlag.sh` beim Ausliefern eingesetzt. Fehlt das Fragment, **bricht der
+Deploy ab** — eine Seite ohne Impressum darf nicht live gehen.
+
+> **Die Historie ist damit nicht sauber.** Name und Anschrift stehen weiterhin in älteren
+> Commits des öffentlichen Repos. Wer sie entfernen will, muss die Historie umschreiben
+> (`git filter-repo`) und force-pushen; Klone und Caches Dritter erreicht das ohnehin nicht.
+
+Nebenbefund vom 04.09.2026: Die **live ausgelieferte `impressum.html` war veraltet** (2066
+Bytes gegen über 6000 im Repo) — die Datenschutzerklärung vom Juli war nie im öffentlichen
+Webroot gelandet, weil nur `setup-backend-lokal.sh` sie kopierte. Das KI-Deploy-Skript
+liefert sie jetzt mit aus.
+
+### Mobile Reihenfolge und Bedienung
+
+- Unter 940 px löst `.wrap > div{display:contents}` die beiden Spalten-Container auf, damit
+  die Karten Geschwister werden und sich per `order` sortieren lassen — kein DOM-Umbau, die
+  Desktop-Ansicht bleibt unberührt. Reihenfolge: Modelldatei, Modell erzeugen, Material,
+  Druckeinstellungen, Kalkulation, Beschreib dein Vorhaben, Notizen, Kontakt.
+- Der **Senden-Knopf sitzt jetzt in der Kontakt-Karte**, nicht mehr in der Kopfzeile: dort
+  tippt der Kunde seine Adresse ein und findet den Knopf direkt darunter.
+- **STL-Download:** Nach dem Erzeugen erscheint „STL herunterladen" (Blob plus `<a download>`,
+  Objekt-URL wird nach dem Klick freigegeben). E2E-Test prüft den Dateinamen.
 
 ## Offene Punkte
 
