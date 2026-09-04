@@ -263,6 +263,25 @@
   <!-- LINKS -->
   <div>
     <div class="card">
+      <h3>Modell erzeugen lassen</h3>
+      <p class="sub">Beschreib ein einfaches Teil mit Maßen — die KI schreibt ein OpenSCAD-Skript,
+        der Pi rendert es. Für Geometrie gedacht (Hülsen, Winkel, Halter, Platten), nicht für Figuren.</p>
+      <textarea id="scadWish" rows="2" placeholder="z. B. Distanzhülse, außen 20 mm, innen 8 mm, 15 mm hoch"></textarea>
+      <div class="stack" style="margin-top:10px">
+        <button id="btnScad">Modell erzeugen</button>
+      </div>
+      <div class="hint" id="scadOut" style="display:none"></div>
+      <div id="scadBox" style="display:none;margin-top:12px">
+        <p class="sub">Maße ändern und neu rendern — das kostet nichts, es läuft ohne KI.</p>
+        <textarea id="scadCode" rows="10" spellcheck="false"
+                  style="font-family:ui-monospace,Menlo,monospace;font-size:12px"></textarea>
+        <div class="stack" style="margin-top:10px">
+          <button id="btnScadRender" class="ghost">Neu rendern</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>Modelldatei</h3>
       <p class="sub">STL oder 3MF — beide direkt aus jedem FDM-Slicer.</p>
       <div id="drop">
@@ -1178,6 +1197,54 @@ async function requestSuggestion(){
   }
 }
 $("btnAi").onclick = requestSuggestion;
+
+/* ---------- Modell erzeugen lassen ---------- */
+// Das gerenderte STL geht durch dieselbe loadFile()-Kette wie eine abgelegte Datei —
+// Parser, Vorschau, Volumen und Kalkulation bleiben unberuehrt.
+const SCAD_API_URL = "/api/scad";
+
+async function scadAnfordern(body, wartetext){
+  const out = $("scadOut"), btn = $("btnScad"), btn2 = $("btnScadRender");
+  out.style.display = "block";
+  out.textContent = wartetext;
+  btn.disabled = true; btn2.disabled = true;
+  try {
+    const res = await fetch(SCAD_API_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!data.ok){ out.textContent = data.error || "Das hat nicht geklappt."; return; }
+
+    const bytes = Uint8Array.from(atob(data.stl), c => c.charCodeAt(0));
+    await loadFile(new File([bytes], data.name + ".stl"));
+
+    $("scadCode").value = data.scad;
+    $("scadBox").style.display = "block";
+    out.textContent = data.reason || "Modell erzeugt.";
+  } catch (e){
+    out.textContent = "Der Dienst ist gerade nicht erreichbar: " + e.message;
+  } finally {
+    btn.disabled = false; btn2.disabled = false;
+  }
+}
+
+$("btnScad").onclick = () => {
+  const wunsch = $("scadWish").value.trim();
+  if (!wunsch){
+    $("scadOut").style.display = "block";
+    $("scadOut").textContent = "Bitte beschreib kurz, was gedruckt werden soll — am besten mit Maßen.";
+    return;
+  }
+  scadAnfordern({ description: wunsch }, "Modell wird erzeugt, das dauert einen Moment …");
+};
+
+$("btnScadRender").onclick = () => {
+  const code = $("scadCode").value.trim();
+  if (!code) return;
+  scadAnfordern({ scad: code, name: $("scadWish").value.trim().slice(0,40) || "modell" }, "Wird neu gerendert …");
+};
 
 /* ---------- Speichern / Laden ---------- */
 // ABSICHTLICH ohne "customerEmail": die Kontakt-Mail-Adresse darf nirgends gespeichert werden

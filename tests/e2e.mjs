@@ -618,6 +618,75 @@ await test('backend.html hat den KI-Vorschlag ebenfalls, Uebernahme funktioniert
   assert.match(await text('#aiOut', pageB), /Backend-Test/);
 });
 
+await test('Erzeugtes Modell laeuft durch Parser, Vorschau und Volumen', async () => {
+  // Der gemockte Server liefert ein echtes ASCII-STL zurueck; geprueft wird, dass der
+  // Client es durch dieselbe loadFile()-Kette schickt wie eine abgelegte Datei.
+  const stlText = boxSTL(20,20,20);
+  const call = await pageB.evaluate(async ({stlText}) => {
+    const orig = window.fetch;
+    let captured = null;
+    window.fetch = async (url, opts) => {
+      if (!String(url).includes('/api/scad')) return { ok:true, json: async () => ({ok:true}) };
+      captured = { url, body: JSON.parse(opts.body) };
+      return { ok:true, json: async () => ({ok:true,
+        name:'test-huelse', scad:'d = 20; // mm\ncube(d);', reason:'Testmodell.',
+        stl: btoa(stlText) }) };
+    };
+    document.getElementById('scadWish').value = 'Distanzhülse, außen 20 mm';
+    document.getElementById('btnScad').click();
+    await new Promise(r => setTimeout(r, 600));
+    window.fetch = orig;
+    return captured;
+  }, {stlText});
+
+  assert.equal(call.url, '/api/scad');
+  assert.match(call.body.description, /Distanzhülse/);
+  assert.equal(await text('#rVol', pageB), '8,0 cm³', 'STL muss durch den Parser gelaufen sein');
+  assert.equal(await text('#rDim', pageB), '20 × 20 × 20 mm');
+  assert.match(await pageB.$eval('#scadCode', el => el.value), /d = 20/);
+  assert.match(await text('#scadOut', pageB), /Testmodell/);
+});
+
+await test('Neu rendern schickt das bearbeitete Skript, nicht die Beschreibung', async () => {
+  const stlText = boxSTL(10,10,10);
+  const call = await pageB.evaluate(async ({stlText}) => {
+    const orig = window.fetch;
+    let captured = null;
+    window.fetch = async (url, opts) => {
+      if (!String(url).includes('/api/scad')) return { ok:true, json: async () => ({ok:true}) };
+      captured = JSON.parse(opts.body);
+      return { ok:true, json: async () => ({ok:true,
+        name:'test', scad:'d = 10;', reason:'Aus dem bearbeiteten Skript gerendert.',
+        stl: btoa(stlText) }) };
+    };
+    document.getElementById('scadCode').value = 'd = 10; // geaendert';
+    document.getElementById('btnScadRender').click();
+    await new Promise(r => setTimeout(r, 600));
+    window.fetch = orig;
+    return captured;
+  }, {stlText});
+
+  assert.match(call.scad, /geaendert/);
+  assert.equal(call.description, undefined, 'beim Neu-Rendern darf keine Beschreibung mitgehen');
+  assert.equal(await text('#rVol', pageB), '1,0 cm³');
+});
+
+await test('Leere Beschreibung erzeugt kein Modell', async () => {
+  const called = await pageB.evaluate(async () => {
+    const orig = window.fetch;
+    let hit = false;
+    window.fetch = async (url) => { if (String(url).includes('/api/scad')) hit = true;
+      return { ok:true, json: async () => ({ok:true}) }; };
+    document.getElementById('scadWish').value = '   ';
+    document.getElementById('btnScad').click();
+    await new Promise(r => setTimeout(r, 200));
+    window.fetch = orig;
+    return hit;
+  });
+  assert.equal(called, false);
+  assert.match(await text('#scadOut', pageB), /beschreib/i);
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });
