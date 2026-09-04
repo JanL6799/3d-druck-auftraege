@@ -70,7 +70,15 @@
 
   .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px;
         display:grid;grid-template-columns:1fr 372px;gap:22px;align-items:start}
-  @media(max-width:940px){ .wrap{grid-template-columns:1fr} .hero h2{font-size:34px} }
+  @media(max-width:940px){
+    .wrap{grid-template-columns:1fr} .hero h2{font-size:34px}
+    /* Eine Spalte: die beiden Spalten-Container aufloesen, damit die Karten Geschwister
+       werden und sich per order in die Reihenfolge der Kundenreise bringen lassen. */
+    .wrap > div{display:contents}
+    .card{margin-bottom:0}
+    #cardFile{order:1} #cardGen{order:2} #cardMaterial{order:3} #cardSettings{order:4}
+    #cardCalc{order:5} #cardWish{order:6} #cardNotes{order:7} #cardContact{order:8}
+  }
 
   .card{background:var(--panel);border-radius:var(--r);padding:26px;margin-bottom:22px;box-shadow:var(--shadow)}
   .card h3{font-size:21px;font-weight:600;letter-spacing:-.02em;margin:0 0 3px}
@@ -199,7 +207,6 @@
     <button id="btnSave" class="sm"><span class="wide">Stand speichern</span><span class="narrow">Speichern</span></button>
     <button id="btnLoad" class="sm"><span class="wide">Stand laden</span><span class="narrow">Laden</span></button>
     <button id="btnPdf" class="sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
-    <button id="btnMail" class="primary sm"><span class="wide">Per Mail senden</span><span class="narrow">Mail</span></button>
   </div>
 </header>
 
@@ -211,7 +218,7 @@
 <div class="wrap">
   <!-- LINKS -->
   <div>
-    <div class="card">
+    <div class="card" id="cardGen">
       <h3>Modell erzeugen lassen</h3>
       <p class="sub">Du hast kein 3D-Modell? Beschreib einfach, was du brauchst — mit Maßen wird
         es am besten. Ein Foto ist <b>freiwillig</b> und hilft uns zu verstehen, welche Form du
@@ -225,9 +232,12 @@
         <button id="btnFoto">Modell erzeugen lassen</button>
       </div>
       <div class="hint" id="fotoOut" style="display:none"></div>
+      <div class="stack" id="stlBox" style="display:none;margin-top:10px">
+        <button id="btnStl" class="sm">STL herunterladen</button>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardFile">
       <h3>Modelldatei</h3>
       <p class="sub">STL oder 3MF — beide direkt aus jedem FDM-Slicer.</p>
       <div id="drop">
@@ -251,7 +261,7 @@
       <div class="warnbox" id="warn"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardWish">
       <h3>Beschreib dein Vorhaben</h3>
       <p class="sub">Ein Satz genügt — wir schlagen Material, Farbe und Einstellungen vor. Ändern kannst du alles danach noch.</p>
       <textarea id="aiWish" rows="2" placeholder="z. B. Halterung fürs Fahrrad, muss Regen abkönnen"></textarea>
@@ -261,7 +271,7 @@
       <div class="hint" id="aiOut" style="display:none"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardSettings">
       <h3>Druckeinstellungen</h3>
       <p class="sub">Bestimmen Materialbedarf, Druckzeit und damit den Preis.</p>
       <div class="row">
@@ -292,7 +302,7 @@
 
   <!-- RECHTS -->
   <div>
-    <div class="card">
+    <div class="card" id="cardContact">
       <h3>Kontakt</h3>
       <p class="sub">Damit ich mich bei dir melden kann.</p>
       <label for="customerEmail">Deine E-Mail-Adresse</label>
@@ -305,16 +315,19 @@
       <p class="hint" style="text-align:left;margin-top:6px">
         Ohne Haken: Abholung. Die Lieferadresse klären wir per Mail — hier bitte keine eintragen.
       </p>
+      <div class="stack" style="margin-top:14px">
+        <button id="btnMail" class="primary">Anfrage per Mail senden</button>
+      </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardNotes">
       <h3>Notizen</h3>
       <p class="sub">Sonderwünsche oder Hinweise zu deiner Anfrage — geht mit an mich, wenn du „Per Mail senden“ nutzt.</p>
       <label for="notes">Kommentar</label>
       <textarea id="notes" placeholder="z. B. Sonderwünsche, Nachbearbeitung, Verpackung …"></textarea>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardCalc">
       <h3>Kalkulation</h3>
       <p class="sub">Live aus Modell, Material und Einstellungen.</p>
       <table class="calc">
@@ -334,7 +347,7 @@
       <div class="hint" id="rPer" style="text-align:right"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardMaterial">
       <h3>Material &amp; Farbe</h3>
       <p class="sub">PLA für innen, PETG für draußen — die Wahl legt Material und Farbe zusammen fest.</p>
       <div id="paletteGroups"></div>
@@ -985,6 +998,7 @@ const MODEL_API_URL = "/api/model";
 const FOTO_MAX_KANTE = 1568;   // darueber bringt mehr Aufloesung der Bilderkennung nichts
 
 let fotoDaten = null;   // { media_type, data }
+let letztesStl = null;  // { bytes, name } — fuer den Download des erzeugten Modells
 
 function bildVerkleinern(file){
   return new Promise((resolve, reject) => {
@@ -1027,6 +1041,17 @@ $("fotoFile").addEventListener("change", async e => {
   }
 });
 
+$("btnStl").onclick = () => {
+  if (!letztesStl) return;
+  // Blob statt Data-URL: ein STL kann ein paar MB haben, und ein Objekt-URL kommt ohne
+  // base64-Aufblaehung aus. Nach dem Klick wieder freigeben.
+  const url = URL.createObjectURL(new Blob([letztesStl.bytes], {type:"model/stl"}));
+  const a = document.createElement("a");
+  a.href = url; a.download = letztesStl.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
 $("btnFoto").onclick = async () => {
   const out = $("fotoOut"), btn = $("btnFoto");
   const wunsch = $("fotoWish").value.trim();
@@ -1049,6 +1074,8 @@ $("btnFoto").onclick = async () => {
 
     const bytes = Uint8Array.from(atob(data.stl), c => c.charCodeAt(0));
     await loadFile(new File([bytes], data.name + ".stl"));
+    letztesStl = { bytes, name: data.name + ".stl" };
+    $("stlBox").style.display = "flex";
     out.textContent = data.reason || "Modell erzeugt.";
   } catch (e){
     out.textContent = "Der Dienst ist gerade nicht erreichbar. Du kannst stattdessen eine fertige Datei hochladen.";
