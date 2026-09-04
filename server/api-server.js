@@ -38,6 +38,11 @@ const MAX_BODY_AI       = 64 * 1024;   // Beschreibung + Palette, mehr braucht e
 const AI_PER_IP_HOUR    = 10;
 const AI_PER_DAY        = 200;
 const AI_DESC_MAX       = 1000;
+const MODEL_PER_IP_HOUR = 5;             // Vorgabe: hoechstens 5 Modelle je Nutzer und Stunde
+const MODEL_PER_DAY     = 100;           // globaler Deckel, der Pi rendert nicht unbegrenzt
+const MAX_BODY_IMG      = 12*1024*1024;  // base64 blaeht ~1,33x auf
+const IMG_MAX_BYTES     = 5*1024*1024;   // entpacktes Bild
+const MAX_PARALLEL_SCAD = 2;             // 4 Kerne, aber der Pi macht noch anderes
 const SCAD_TIMEOUT_MS   = 20000;         // ein Pi 4 rendert einfache CSG in Sekunden
 const SCAD_MAX_STL      = 20*1024*1024;  // groesser wird kein parametrisches Teil
 
@@ -158,29 +163,41 @@ async function handlePostCalcbase(req, res){
 /* ---------- KI-Vorschlag ---------- */
 // Rate-Limit rein im Arbeitsspeicher: ein Neustart des Dienstes setzt die Zähler zurück.
 // Bewusst so — Persistenz wäre für ein Limit, das nur Missbrauch bremsen soll, zu viel Aufwand.
-const aiIpHits = new Map();   // IP -> Zeitstempel[]
-let aiDayKey = "", aiDayCount = 0;
+// Zwei unabhaengige Zaehler mit verschiedenen Grenzen (Vorschlag vs. Modell aus Bild),
+// deshalb eine kleine Fabrik statt zweier kopierter Bloecke.
+function makeRateLimit(proIpStunde, proTag, tagesText){
+  const hits = new Map();       // IP -> Zeitstempel[]
+  let tagKey = "", tagZahl = 0;
+  return {
+    reset(){ hits.clear(); tagKey = ""; tagZahl = 0; },
+    check(ip, now = Date.now()){
+      const heute = new Date(now).toISOString().slice(0, 10);
+      if (heute !== tagKey){ tagKey = heute; tagZahl = 0; }
+      if (tagZahl >= proTag) return tagesText;
 
-function resetRateLimit(){ aiIpHits.clear(); aiDayKey = ""; aiDayCount = 0; }
+      const meine = (hits.get(ip) || []).filter(t => now - t < 60*60*1000);
+      if (meine.length >= proIpStunde)
+        return `Zu viele Anfragen von diesem Anschluss (${proIpStunde} pro Stunde). Bitte spaeter erneut versuchen.`;
 
-function rateLimitCheck(ip, now = Date.now()){
-  const today = new Date(now).toISOString().slice(0, 10);
-  if (today !== aiDayKey){ aiDayKey = today; aiDayCount = 0; }
-  if (aiDayCount >= AI_PER_DAY)
-    return "Das Tageslimit für KI-Vorschläge ist erreicht. Bitte stell die Werte von Hand ein oder versuch es morgen erneut.";
-
-  const hits = (aiIpHits.get(ip) || []).filter(t => now - t < 60*60*1000);
-  if (hits.length >= AI_PER_IP_HOUR)
-    return "Zu viele Anfragen von diesem Anschluss. Bitte in einer Stunde erneut versuchen.";
-
-  hits.push(now);
-  aiIpHits.set(ip, hits);
-  aiDayCount++;
-  // ponytail: einfacher Deckel gegen unbegrenztes Map-Wachstum. Reicht bei diesem
-  // Anfragevolumen; bei echtem Dauerbetrieb wären zeitgesteuerte Aufräumläufe richtig.
-  if (aiIpHits.size > 1000) aiIpHits.clear();
-  return null;
+      meine.push(now);
+      hits.set(ip, meine);
+      tagZahl++;
+      // ponytail: einfacher Deckel gegen unbegrenztes Map-Wachstum. Reicht bei diesem
+      // Anfragevolumen; bei echtem Dauerbetrieb waeren zeitgesteuerte Aufraeumlaeufe richtig.
+      if (hits.size > 1000) hits.clear();
+      return null;
+    }
+  };
 }
+
+const aiLimit = makeRateLimit(AI_PER_IP_HOUR, AI_PER_DAY,
+  "Das Tageslimit für KI-Vorschläge ist erreicht. Bitte stell die Werte von Hand ein oder versuch es morgen erneut.");
+const modelLimit = makeRateLimit(MODEL_PER_IP_HOUR, MODEL_PER_DAY,
+  "Das Tageslimit für erzeugte Modelle ist erreicht. Bitte versuch es morgen erneut.");
+
+function resetRateLimit(){ aiLimit.reset(); modelLimit.reset(); }
+function rateLimitCheck(ip, now = Date.now()){ return aiLimit.check(ip, now); }
+function modelLimitCheck(ip, now = Date.now()){ return modelLimit.check(ip, now); }
 
 function clientIp(req){
   // nginx setzt X-Forwarded-For; der Dienst hört nur auf 127.0.0.1, direkte Aufrufe
@@ -294,6 +311,88 @@ async function callAnthropic(body){
   }
   throw new Error("Anthropic ist gerade überlastet.");
 }
+/* ---------- Bildpruefung ---------- */
+
+// Nur Formate, die die Anthropic-Vision-API annimmt. Der media_type aus dem Request wird
+// gegen die Magic Bytes geprueft — sonst koennte jemand beliebige Bytes als Bild deklarieren.
+const IMG_MAGIC = {
+  "image/jpeg": b => b[0]===0xFF && b[1]===0xD8 && b[2]===0xFF,
+  "image/png":  b => b[0]===0x89 && b[1]===0x50 && b[2]===0x4E && b[3]===0x47,
+  "image/gif":  b => b.slice(0,4).toString("latin1") === "GIF8",
+  "image/webp": b => b.slice(0,4).toString("latin1") === "RIFF" && b.slice(8,12).toString("latin1") === "WEBP"
+};
+
+// Gibt einen Fehlertext zurueck oder null, wenn das Bild in Ordnung ist.
+function pruefeBild(bild){
+  if (!bild || typeof bild !== "object") return "Es fehlt ein Bild.";
+  const { media_type, data } = bild;
+  if (!IMG_MAGIC[media_type]) return "Dieses Bildformat wird nicht unterstuetzt. Bitte JPEG, PNG, GIF oder WebP.";
+  if (typeof data !== "string" || !data) return "Das Bild ist leer.";
+  let roh;
+  try { roh = Buffer.from(data, "base64"); }
+  catch { return "Das Bild liess sich nicht lesen."; }
+  if (roh.length === 0) return "Das Bild ist leer.";
+  if (roh.length > IMG_MAX_BYTES) return "Das Bild ist zu gross (hoechstens 5 MB).";
+  if (!IMG_MAGIC[media_type](roh)) return "Das Bild passt nicht zum angegebenen Format.";
+  return null;
+}
+
+/* ---------- Moderation ---------- */
+
+function moderationSchema(){
+  return {
+    type: "object",
+    properties: {
+      erlaubt:   { type: "boolean" },
+      kategorie: { type: "string", enum: ["ok","person","sexuell","gewalt","hass","beschreibung","sonstiges"] },
+      hinweis:   { type: "string" }
+    },
+    required: ["erlaubt","kategorie","hinweis"],
+    additionalProperties: false
+  };
+}
+
+function moderationSystemPrompt(){
+  return [
+    "Du pruefst Uploads fuer eine 3D-Druckerei, bevor daraus ein Modell erzeugt wird.",
+    "Der Kunde soll den Gegenstand fotografieren, den er gedruckt haben moechte.",
+    "",
+    "Setze erlaubt=false, wenn eines davon zutrifft:",
+    "- Auf dem Bild ist ein Mensch erkennbar — Gesicht oder Koerper, ganz oder teilweise,",
+    "  Erwachsener oder Kind, auch im Hintergrund. Kategorie: person.",
+    "  Statuen, Puppen, Zeichnungen und Spielfiguren sind keine Menschen.",
+    "- Nacktheit oder sexueller Inhalt in Bild oder Text. Kategorie: sexuell.",
+    "- Gewaltdarstellung, Verletzungen, Blut. Kategorie: gewalt.",
+    "- Hass-Symbole oder verfassungsfeindliche Kennzeichen. Kategorie: hass.",
+    "- Die Beschreibung ist beleidigend, diskriminierend oder sexuell. Kategorie: beschreibung.",
+    "",
+    "Sonst erlaubt=true und kategorie=ok.",
+    "",
+    "hinweis: ein freundlicher deutscher Satz an den Kunden, in der Du-Form wie der Rest",
+    "der Seite. Bei Ablehnung sagen, was er",
+    "aendern soll (zum Beispiel: nur den Gegenstand fotografieren, ohne Personen im Bild).",
+    "Keine Vorwuerfe, keine Wiederholung des beanstandeten Inhalts. Bei erlaubt=true ein",
+    "kurzer Satz, was auf dem Bild zu sehen ist."
+  ].join("\n");
+}
+
+function bildBlock(bild){
+  return { type: "image", source: { type: "base64", media_type: bild.media_type, data: bild.data } };
+}
+
+function buildModerationBody(description, bild, model = ANTHROPIC_MODEL){
+  const body = {
+    model,
+    max_tokens: 2000,
+    system: moderationSystemPrompt(),
+    // Bild vor Text, wie von der API empfohlen.
+    messages: [{ role: "user", content: [bildBlock(bild), { type: "text", text: description }] }],
+    output_config: { format: { type: "json_schema", schema: moderationSchema() } }
+  };
+  if (!/haiku/i.test(model)) body.output_config.effort = "low";
+  return body;
+}
+
 /* ---------- Modell aus Beschreibung (OpenSCAD) ---------- */
 
 function scadSchema(){
@@ -330,12 +429,17 @@ function scadSystemPrompt(){
   ].join("\n");
 }
 
-function buildScadRequestBody(description, model = ANTHROPIC_MODEL){
+function buildScadRequestBody(description, model = ANTHROPIC_MODEL, bild = null){
   const body = {
     model,
     max_tokens: 8000,
-    system: scadSystemPrompt(),
-    messages: [{ role: "user", content: description }],
+    system: scadSystemPrompt() + (bild
+      ? "\n\nDu siehst zusaetzlich ein Foto des gewuenschten Teils. Nutze es, um Form und\n" +
+        "Aufbau zu verstehen. Masse liefert ein Foto nicht — nimm die aus dem Text, und wo\n" +
+        "sie fehlen, waehle uebliche Werte und markiere sie als angenommen."
+      : ""),
+    messages: [{ role: "user",
+      content: bild ? [bildBlock(bild), { type: "text", text: description }] : description }],
     output_config: { format: { type: "json_schema", schema: scadSchema() } }
   };
   if (!/haiku/i.test(model)) body.output_config.effort = "low";
@@ -355,11 +459,20 @@ function sanitizeScad(code){
 
 // Rendert in einem eigenen Temp-Verzeichnis mit hartem Zeitlimit. Ein Skript mit
 // Endlosschleife wuerde sonst dauerhaft einen Kern belegen.
+// Ein oeffentlich erreichbarer Renderer auf einem Pi 4: mehr als zwei gleichzeitige
+// Laeufe will die Kiste nicht, auch wenn das Rate-Limit pro IP greift.
+let laufendeRenders = 0;
+
 function renderScad(code){
   return new Promise((resolve, reject) => {
+    if (laufendeRenders >= MAX_PARALLEL_SCAD){
+      reject(new Error("Gerade sind zu viele Modelle in Arbeit. Bitte in einer Minute erneut versuchen."));
+      return;
+    }
+    laufendeRenders++;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scad-"));
     const src = path.join(dir, "m.scad"), out = path.join(dir, "m.stl");
-    const aufraeumen = () => { try { fs.rmSync(dir, {recursive:true, force:true}); } catch {} };
+    const aufraeumen = () => { laufendeRenders--; try { fs.rmSync(dir, {recursive:true, force:true}); } catch {} };
     fs.writeFileSync(src, code);
     execFile("openscad", ["-o", out, src], {timeout: SCAD_TIMEOUT_MS}, (err, stdout, stderr) => {
       if (err){
@@ -467,6 +580,104 @@ async function handleScad(req, res){
   }
 }
 
+// Oeffentlich erreichbar: Kunde laedt ein Foto hoch und beschreibt, was er gedruckt haben
+// moechte. Das Bild wird NIRGENDS gespeichert — weder auf Platte noch im Backup. Es lebt nur
+// in dieser Anfrage und geht an die Moderation und die Modellerzeugung.
+async function handleModel(req, res){
+  const limitError = modelLimitCheck(clientIp(req));
+  if (limitError){
+    res.writeHead(429, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:limitError}));
+    return;
+  }
+
+  const body = await readBody(req, MAX_BODY_IMG);
+  let payload;
+  try { payload = JSON.parse(body); }
+  catch { res.writeHead(400); res.end("Ungueltiges JSON"); return; }
+
+  const description = typeof payload.description === "string" ? payload.description.trim() : "";
+  if (!description || description.length > AI_DESC_MAX){
+    res.writeHead(400, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:`Bitte beschreib in ein bis zwei Saetzen, was gedruckt werden soll (hoechstens ${AI_DESC_MAX} Zeichen).`}));
+    return;
+  }
+  const bildFehler = pruefeBild(payload.image);
+  if (bildFehler){
+    res.writeHead(400, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:bildFehler}));
+    return;
+  }
+  if (!ANTHROPIC_API_KEY){
+    res.writeHead(500, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"ANTHROPIC_API_KEY ist auf dem Server nicht gesetzt."}));
+    return;
+  }
+
+  // Schritt 1: Moderation. Faellt sie aus, wird abgelehnt — ein Sicherheitsgatter, das bei
+  // eigenem Fehler durchwinkt, ist keines.
+  let pruefung;
+  try {
+    const data = await callAnthropic(buildModerationBody(description, payload.image));
+    if (data.stop_reason === "refusal"){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, kategorie:"sonstiges",
+        error:"Dieser Upload laesst sich nicht verarbeiten. Bitte fotografiere nur den Gegenstand, den du gedruckt haben moechtest."}));
+      return;
+    }
+    const block = (data.content || []).find(b => b.type === "text");
+    pruefung = JSON.parse(block.text);
+  } catch (e){
+    console.error("Moderation fehlgeschlagen:", e.message);
+    res.writeHead(502, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"Die Pruefung des Bildes hat nicht geklappt. Bitte versuch es spaeter erneut."}));
+    return;
+  }
+
+  if (!pruefung.erlaubt){
+    console.error("Upload abgelehnt, Kategorie:", pruefung.kategorie);
+    res.writeHead(422, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, kategorie:pruefung.kategorie,
+      error:String(pruefung.hinweis || "Dieser Upload laesst sich nicht verarbeiten.").slice(0,500)}));
+    return;
+  }
+
+  // Schritt 2: erst jetzt das Modell.
+  try {
+    const data = await callAnthropic(buildScadRequestBody(description, ANTHROPIC_MODEL, payload.image));
+    if (data.stop_reason === "refusal"){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:"Dazu laesst sich kein Modell erzeugen. Bitte beschreib es anders."}));
+      return;
+    }
+    if (data.stop_reason === "max_tokens")
+      throw new Error("Die Antwort wurde abgeschnitten. Bitte beschreib ein einfacheres Teil.");
+    const block = (data.content || []).find(b => b.type === "text");
+    if (!block) throw new Error("Antwort ohne Textblock.");
+    const sug = JSON.parse(block.text);
+
+    const schlecht = sanitizeScad(sug.scad);
+    if (schlecht){
+      res.writeHead(422, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:schlecht}));
+      return;
+    }
+
+    const stl = await renderScad(sug.scad);
+    res.writeHead(200, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:true,
+      name:    String(sug.name || "modell").replace(/[^a-z0-9-]/gi, "").slice(0,60) || "modell",
+      scad:    sug.scad,
+      reason:  String(sug.reason || "").trim().slice(0,500),
+      hinweis: String(pruefung.hinweis || "").trim().slice(0,300),
+      stl:     stl.toString("base64")
+    }));
+  } catch (e){
+    res.writeHead(502, {"Content-Type":"application/json"});
+    res.end(JSON.stringify({ok:false, error:"Das Modell hat nicht geklappt: " + e.message}));
+  }
+}
+
 async function handleAiSuggest(req, res){
   const limitError = rateLimitCheck(clientIp(req));
   if (limitError){
@@ -536,6 +747,7 @@ const ROUTES = {
   "POST /calcbase":   handlePostCalcbase,
   "POST /ai-suggest": handleAiSuggest,
   "POST /scad":       handleScad,
+  "POST /model":      handleModel,
 };
 
 const server = http.createServer((req, res) => {
@@ -563,4 +775,6 @@ if (require.main === module){
 // Für die Tests (tests/server.mjs) — beim Einbinden als Modul startet oben kein Listener.
 module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit,
                    buildSchema, systemPrompt, buildRequestBody,
-                   scadSchema, scadSystemPrompt, buildScadRequestBody, sanitizeScad };
+                   scadSchema, scadSystemPrompt, buildScadRequestBody, sanitizeScad,
+                   pruefeBild, moderationSchema, moderationSystemPrompt, buildModerationBody,
+                   modelLimitCheck };

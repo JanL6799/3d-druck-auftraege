@@ -171,6 +171,81 @@ test('Leeres und überlanges Skript werden abgelehnt', () => {
   assert.match(api.sanitizeScad('cube(1);'.repeat(4000)) || '', /unplausibel lang/);
 });
 
+/* ---------- Bild und Moderation ---------- */
+
+const jpeg = Buffer.from([0xFF,0xD8,0xFF,0xE0,0,0,0,0]).toString('base64');
+const png  = Buffer.from([0x89,0x50,0x4E,0x47,13,10,26,10]).toString('base64');
+
+test('Gültiges JPEG und PNG werden angenommen', () => {
+  assert.equal(api.pruefeBild({media_type:'image/jpeg', data:jpeg}), null);
+  assert.equal(api.pruefeBild({media_type:'image/png',  data:png}),  null);
+});
+
+test('Falscher media_type zu den Bytes wird abgelehnt', () => {
+  assert.match(api.pruefeBild({media_type:'image/png', data:jpeg}) || '', /passt nicht zum angegebenen Format/);
+});
+
+test('Nicht unterstützte Formate werden abgelehnt', () => {
+  for (const t of ['application/pdf','text/html','image/svg+xml','image/tiff'])
+    assert.match(api.pruefeBild({media_type:t, data:jpeg}) || '', /nicht unterstuetzt/, t);
+});
+
+test('Fehlendes, leeres und zu großes Bild werden abgelehnt', () => {
+  assert.match(api.pruefeBild(undefined) || '', /fehlt ein Bild/);
+  assert.match(api.pruefeBild({media_type:'image/jpeg', data:''}) || '', /leer/);
+  const gross = Buffer.alloc(5*1024*1024 + 10); gross[0]=0xFF; gross[1]=0xD8; gross[2]=0xFF;
+  assert.match(api.pruefeBild({media_type:'image/jpeg', data:gross.toString('base64')}) || '', /zu gross/);
+});
+
+test('Moderations-Schema erzwingt Urteil, Kategorie und Hinweis', () => {
+  const m = api.moderationSchema();
+  assert.deepEqual(m.required, ['erlaubt','kategorie','hinweis']);
+  assert.equal(m.properties.erlaubt.type, 'boolean');
+  assert.ok(m.properties.kategorie.enum.includes('person'));
+  assert.equal(m.additionalProperties, false);
+});
+
+test('Moderations-Prompt lehnt jede erkennbare Person ab, Statuen aber nicht', () => {
+  const p = api.moderationSystemPrompt();
+  assert.match(p, /Mensch erkennbar/);
+  assert.match(p, /auch im Hintergrund/);
+  assert.match(p, /Statuen, Puppen, Zeichnungen und Spielfiguren sind keine Menschen/);
+});
+
+test('Moderations-Request schickt Bild vor Text', () => {
+  const b = api.buildModerationBody('Halterung', {media_type:'image/jpeg', data:jpeg});
+  const inhalt = b.messages[0].content;
+  assert.equal(inhalt[0].type, 'image');
+  assert.equal(inhalt[0].source.media_type, 'image/jpeg');
+  assert.equal(inhalt[1].type, 'text');
+  assert.equal(b.output_config.format.schema.properties.kategorie.enum[0], 'ok');
+});
+
+test('SCAD-Request nimmt das Bild mit auf, wenn eines da ist', () => {
+  const ohne = api.buildScadRequestBody('Huelse');
+  assert.equal(typeof ohne.messages[0].content, 'string');
+  const mit = api.buildScadRequestBody('Huelse', 'claude-opus-5', {media_type:'image/png', data:png});
+  assert.equal(mit.messages[0].content[0].type, 'image');
+  assert.match(mit.system, /Foto des gewuenschten Teils/);
+});
+
+test('Modell-Limit: 5 pro IP und Stunde, danach Sperre', () => {
+  api.resetRateLimit();
+  const t0 = Date.parse('2026-09-04T10:00:00Z');
+  for (let i = 0; i < 5; i++)
+    assert.equal(api.modelLimitCheck('9.9.9.9', t0 + i), null, 'Anfrage ' + (i+1));
+  assert.match(api.modelLimitCheck('9.9.9.9', t0 + 6) || '', /5 pro Stunde/);
+  assert.equal(api.modelLimitCheck('8.8.8.8', t0 + 7), null, 'andere IP unbetroffen');
+  assert.equal(api.modelLimitCheck('9.9.9.9', t0 + 60*60*1000 + 1), null, 'nach einer Stunde frei');
+});
+
+test('Modell-Limit ist unabhängig vom Vorschlags-Limit', () => {
+  api.resetRateLimit();
+  const t0 = Date.parse('2026-09-04T10:00:00Z');
+  for (let i = 0; i < 5; i++) api.modelLimitCheck('7.7.7.7', t0 + i);
+  assert.equal(api.rateLimitCheck('7.7.7.7', t0 + 6), null, 'Vorschlag darf noch');
+});
+
 for (const [s, n] of results) console.log(s, n);
 if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);

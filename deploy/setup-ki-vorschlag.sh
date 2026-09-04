@@ -72,6 +72,16 @@ for site in "${SITES[@]}"; do
     sed -i '/location \/api\/send-mail/i\    location = /api/ai-suggest {\n        proxy_pass http://127.0.0.1:8181/ai-suggest;\n    }\n' "$site"
     echo "   $(basename "$site"): Route ergaenzt."
   fi
+
+  # /api/model ist oeffentlich: Foto + Beschreibung -> Moderation -> Modell. Der groessere
+  # Body-Deckel ist noetig, weil das base64-kodierte Bild mitkommt; ohne ihn antwortet
+  # nginx mit 413, bevor der Dienst die Anfrage ueberhaupt sieht.
+  if grep -q '/api/model' "$site"; then
+    echo "   $(basename "$site"): /api/model existiert schon, uebersprungen."
+  else
+    sed -i '/location \/api\/send-mail/i\    location = /api/model {\n        proxy_pass http://127.0.0.1:8181/model;\n        client_max_body_size 12m;\n        proxy_read_timeout 120s;\n    }\n' "$site"
+    echo "   $(basename "$site"): /api/model ergaenzt."
+  fi
 done
 
 # /api/scad bleibt bewusst auf die Heimnetz-Site beschraenkt, auch beim vollen Rollout:

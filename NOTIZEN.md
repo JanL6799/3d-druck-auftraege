@@ -26,8 +26,8 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 40 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
-| `tests/server.mjs` | 25 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
+| `tests/e2e.mjs` | 45 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/server.mjs` | 35 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -682,6 +682,41 @@ Datei — Parser, Vorschau, Volumen und Kalkulation bleiben unverändert.
 - OpenSCAD 2021.01 aus Debian, rendert headless ohne X-Server (geprüft). Zieht allerdings
   den Qt-Stack mit, 84 Pakete.
 
+### Foto zu Modell (öffentlich) — `POST /api/model`
+
+Der Kunde wählt ein Foto (Mediathek **oder** Kamera) und beschreibt, was daraus werden soll.
+Der Server prüft erst das Bild, dann erzeugt er das Modell. In `index.html`.
+
+- **Kein `capture`-Attribut** am `<input type="file" accept="image/*">`. `capture="environment"`
+  würde auf dem Handy direkt die Kamera öffnen und die Mediathek-Auswahl **entfernen** — genau
+  das Gegenteil des Gewünschten. Ohne das Attribut zeigt iOS/Android beide Optionen.
+- **Das Bild wird nirgends gespeichert.** Es lebt nur in der einen Anfrage; weder Platte noch
+  Backup. Steht so auch in der Datenschutzerklärung (`impressum.html`).
+- **Verkleinern im Browser** auf 1568 px längste Kante, JPEG 0.85, per `FileReader` + Canvas.
+  Spart Upload, Token und Wartezeit.
+- **Moderation ist ein eigener API-Aufruf vor der Erzeugung**, nicht eine Nebenbedingung im
+  Generierungs-Prompt. Sie **schlägt fail-closed zu**: scheitert die Prüfung selbst, wird
+  abgelehnt. Ein Gatter, das bei eigenem Fehler durchwinkt, ist keines.
+- **Regel: keine erkennbare Person im Bild** — eine Regel statt drei Grenzfällen (+18, Kinder,
+  DSGVO-Biometrie). Statuen, Puppen und Zeichnungen sind ausdrücklich keine Personen.
+  Kategorien: `person`, `sexuell`, `gewalt`, `hass`, `beschreibung`, `sonstiges`.
+  Ablehnungen landen mit Kategorie im Journal, ohne den Inhalt zu protokollieren.
+- **Limit: 5 Modelle je IP und Stunde**, 100 am Tag global. Ohne Login gibt es keinen „User" —
+  das ist eine IP-Grenze und entsprechend umgehbar.
+- **Höchstens 2 gleichzeitige OpenSCAD-Läufe** (`MAX_PARALLEL_SCAD`). Das Rate-Limit greift pro
+  IP, viele IPs gleichzeitig würden den Pi sonst trotzdem plattmachen.
+- **Bildprüfung serverseitig:** erlaubte Typen JPEG/PNG/GIF/WebP, entpackt ≤ 5 MB, und die
+  Magic Bytes müssen zum angegebenen `media_type` passen.
+- nginx braucht für die Route `client_max_body_size 12m` — sonst antwortet es mit 413, bevor
+  der Dienst die Anfrage überhaupt sieht.
+
+**Grenze, die man dem Kunden nicht ansieht:** Ein Foto liefert *keine* Geometrie. OpenSCAD baut
+aus Quadern und Zylindern; das Bild hilft dem Modell nur zu verstehen, welche Form gemeint ist.
+Bei Winkeln, Halterungen und Platten funktioniert das, bei Figuren und Tieren nicht.
+
+**Nebenbefund:** OpenSCAD exportiert headless nach STL, aber **PNG-Vorschauen brauchen OpenGL**
+und scheitern auf dem Pi mit „Unable to open a connection to the X server".
+
 ## Offene Punkte
 
 1. **Kein Live-Abgleich mit den Plattformen.** Der CSV-Import ersetzt das Abtippen, aber ein
@@ -697,7 +732,11 @@ Datei — Parser, Vorschau, Volumen und Kalkulation bleiben unverändert.
    Header kennt, könnte die öffentlich erreichbare `POST`-Route theoretisch fluten oder mit
    Unsinnswerten überschreiben — niedriges Risiko (nur Kalkulationsbasis, kein Zugriff auf
    Aufträge/Kundendaten), aber kein Schutz dagegen eingebaut.
-6. **Datenschutzerklärung sollte vor echtem Live-Betrieb mit relevanten Bestellzahlen von
+6. **Personen-Erkennung ist mit echten Fotos ungeprüft.** Der Moderations-Gate wurde live
+   getestet: harmloses Bild → Modell, anstößige Beschreibung → Ablehnung mit Kategorie. Ob ein
+   echtes Foto mit einer Person zuverlässig abgelehnt wird, hat noch niemand ausprobiert — das
+   geht nur mit einem echten Bild.
+7. **Datenschutzerklärung sollte vor echtem Live-Betrieb mit relevanten Bestellzahlen von
    jemand Fachkundigem gegengelesen werden** — insbesondere ob mit Resend ein
    Auftragsverarbeitungsvertrag (AVV) besteht bzw. abgeschlossen werden sollte. Die Formulierung
    in `impressum.html` ist ein guter-Glaube-Standardtext auf Basis der tatsächlichen

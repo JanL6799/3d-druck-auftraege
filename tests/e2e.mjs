@@ -687,6 +687,94 @@ await test('Leere Beschreibung erzeugt kein Modell', async () => {
   assert.match(await text('#scadOut', pageB), /beschreib/i);
 });
 
+/* ---------- Foto zu Modell (oeffentliche Seite) ---------- */
+
+// Setzt ein 2x2-PNG als Datei in den Input, damit der Verkleinerungs-Pfad echt durchlaufen wird.
+const fotoWaehlen = () => page.evaluate(async () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==';   // gueltiges 2x2-PNG, rot
+  const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0));
+  const dt = new DataTransfer();
+  dt.items.add(new File([bytes], 'foto.png', {type:'image/png'}));
+  const el = document.getElementById('fotoFile');
+  el.files = dt.files;
+  el.dispatchEvent(new Event('change'));
+  await new Promise(r => setTimeout(r, 400));
+  return document.getElementById('fotoVorschau').style.display;
+});
+
+await test('Foto-Eingabe erlaubt Mediathek UND Kamera (kein capture-Attribut)', async () => {
+  // capture="environment" wuerde auf dem Handy direkt die Kamera oeffnen und die
+  // Mediathek-Auswahl entfernen — genau das soll nicht passieren.
+  assert.equal(await page.$eval('#fotoFile', el => el.getAttribute('accept')), 'image/*');
+  assert.equal(await page.$eval('#fotoFile', el => el.hasAttribute('capture')), false);
+});
+
+await test('Gewähltes Foto wird verkleinert und als Vorschau gezeigt', async () => {
+  assert.equal(await fotoWaehlen(), 'block');
+  const src = await page.$eval('#fotoVorschau', el => el.src);
+  assert.match(src, /^data:image\/jpeg;base64,/, 'wird als JPEG neu kodiert');
+});
+
+await test('Foto zu Modell: Bild und Beschreibung gehen raus, STL landet in der Vorschau', async () => {
+  const stlText = boxSTL(20,20,20);
+  const call = await page.evaluate(async ({stlText}) => {
+    const orig = window.fetch;
+    let captured = null;
+    window.fetch = async (url, opts) => {
+      if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
+      captured = JSON.parse(opts.body);
+      return { ok:true, json: async () => ({ok:true,
+        name:'halterung', scad:'b = 60;', reason:'Halterung nach Foto.',
+        hinweis:'Auf dem Bild ist eine Rohrschelle zu sehen.', stl: btoa(stlText) }) };
+    };
+    document.getElementById('fotoWish').value = 'So eine Halterung, aber 60 mm breit';
+    document.getElementById('btnFoto').click();
+    await new Promise(r => setTimeout(r, 700));
+    window.fetch = orig;
+    return captured;
+  }, {stlText});
+
+  assert.match(call.description, /60 mm breit/);
+  assert.equal(call.image.media_type, 'image/jpeg');
+  assert.ok(call.image.data.length > 0, 'Bilddaten muessen mitgehen');
+  assert.equal(await text('#rVol'), '8,0 cm³', 'STL muss durch den Parser gelaufen sein');
+  assert.match(await text('#fotoOut'), /Halterung nach Foto/);
+});
+
+await test('Abgelehntes Bild zeigt den Hinweis und erzeugt kein Modell', async () => {
+  const volVorher = await text('#rVol');
+  await page.evaluate(async () => {
+    const orig = window.fetch;
+    window.fetch = async (url) => {
+      if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
+      return { ok:true, json: async () => ({ok:false, kategorie:'person',
+        error:'Bitte fotografiere nur den Gegenstand, ohne Personen im Bild.'}) };
+    };
+    document.getElementById('fotoWish').value = 'Das hier bitte drucken';
+    document.getElementById('btnFoto').click();
+    await new Promise(r => setTimeout(r, 500));
+    window.fetch = orig;
+  });
+  assert.match(await text('#fotoOut'), /ohne Personen im Bild/);
+  assert.equal(await text('#rVol'), volVorher, 'Modell darf sich nicht geaendert haben');
+});
+
+await test('Ohne Beschreibung wird nichts hochgeladen', async () => {
+  const called = await page.evaluate(async () => {
+    const orig = window.fetch;
+    let hit = false;
+    window.fetch = async (url) => { if (String(url).includes('/api/model')) hit = true;
+      return { ok:true, json: async () => ({ok:true}) }; };
+    document.getElementById('fotoWish').value = '   ';
+    document.getElementById('btnFoto').click();
+    await new Promise(r => setTimeout(r, 250));
+    window.fetch = orig;
+    return hit;
+  });
+  assert.equal(called, false);
+  assert.match(await text('#fotoOut'), /beschreib/i);
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });
