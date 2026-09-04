@@ -28,6 +28,15 @@ read -rsp "Anthropic-API-Key (console.anthropic.com): " ANTHROPIC_API_KEY; echo
 
 read -rp "Modell [claude-opus-5]: " ANTHROPIC_MODEL
 ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-opus-5}
+# Modell-IDs schreiben sich durchgehend mit Bindestrich (claude-haiku-4-5, nicht -4.5).
+# Ein Punkt wird sonst kommentarlos uebernommen und faellt erst auf, wenn ein Kunde
+# "Anthropic antwortete mit HTTP 404" liest.
+if ! printf '%s' "$ANTHROPIC_MODEL" | grep -qE '^claude-[a-z0-9-]+$'; then
+  echo "Unplausibler Modellname: $ANTHROPIC_MODEL" >&2
+  echo "Erwartet wird etwas wie claude-opus-5, claude-sonnet-5 oder claude-haiku-4-5" >&2
+  echo "— nur Kleinbuchstaben, Ziffern und Bindestriche, keine Punkte." >&2
+  exit 1
+fi
 
 echo "== 1/4: Key in die systemd-Unit =="
 # Bestehende Environment-Zeilen behalten, ANTHROPIC_* ersetzen bzw. ergänzen.
