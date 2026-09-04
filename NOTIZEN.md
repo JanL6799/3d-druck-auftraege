@@ -26,8 +26,8 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
-| `tests/e2e.mjs` | 47 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
-| `tests/server.mjs` | 35 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
+| `tests/e2e.mjs` | 48 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
+| `tests/server.mjs` | 37 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -698,7 +698,11 @@ Auftrag aus dem Frontend löst im Backend also immer sauber auf. Ein E2E-Test h�
 Nebenwirkung: Die Palette geht bei `/api/ai-suggest` und `/api/model` mit dem Request raus —
 die KI schlägt damit automatisch nur noch aus diesen sechs Farben vor.
 
-### Foto zu Modell (öffentlich) — `POST /api/model`
+### Modell erzeugen (öffentlich) — `POST /api/model`
+
+**Das Foto ist optional.** Ohne Bild wird allein aus der Beschreibung erzeugt; die Moderation
+beurteilt dann nur den Text, die Bildkriterien entfallen. Mit Bild gilt zusätzlich alles
+Folgende.
 
 Der Kunde wählt ein Foto (Mediathek **oder** Kamera) und beschreibt, was daraus werden soll.
 Der Server prüft erst das Bild, dann erzeugt er das Modell. In `index.html`.
@@ -723,6 +727,10 @@ Der Server prüft erst das Bild, dann erzeugt er das Modell. In `index.html`.
   IP, viele IPs gleichzeitig würden den Pi sonst trotzdem plattmachen.
 - **Bildprüfung serverseitig:** erlaubte Typen JPEG/PNG/GIF/WebP, entpackt ≤ 5 MB, und die
   Magic Bytes müssen zum angegebenen `media_type` passen.
+- **Der Ablehnungstext kommt aus dem Code, nicht vom Modell** (`ablehnText`). Haiku formuliert
+  sonst „lade ein anderes Foto hoch", auch wenn gar keines dabei war — die Kategorie liefert es
+  zuverlässig, die Formulierung nicht. Zwei Prompt-Versuche haben das nicht behoben, eine
+  Zuordnung im Code schon.
 - nginx braucht für die Route `client_max_body_size 12m` — sonst antwortet es mit 413, bevor
   der Dienst die Anfrage überhaupt sieht.
 

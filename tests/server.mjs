@@ -246,6 +246,20 @@ test('Modell-Limit ist unabhängig vom Vorschlags-Limit', () => {
   assert.equal(api.rateLimitCheck('7.7.7.7', t0 + 6), null, 'Vorschlag darf noch');
 });
 
+test('Moderation ohne Bild beurteilt nur den Text', () => {
+  const b = api.buildModerationBody('Distanzhuelse 20 mm');
+  assert.equal(typeof b.messages[0].content, 'string', 'ohne Bild reiner Text');
+  assert.match(api.moderationSystemPrompt(), /Liegt kein Bild vor/);
+});
+
+test('Ablehnungstext passt zur Kategorie und erwähnt ohne Bild kein Foto', () => {
+  assert.match(api.ablehnText('person', true), /nur den Gegenstand/);
+  for (const k of ['sexuell','gewalt','hass','beschreibung','sonstiges','quatsch'])
+    assert.doesNotMatch(api.ablehnText(k, false), /Foto|Bild/, k + ' ohne Bild');
+  assert.match(api.ablehnText('sexuell', true), /anderes Bild/);
+  assert.match(api.ablehnText('beschreibung', true), /formuliere sie anders/);
+});
+
 for (const [s, n] of results) console.log(s, n);
 if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);

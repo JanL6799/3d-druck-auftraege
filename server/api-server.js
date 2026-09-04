@@ -357,6 +357,8 @@ function moderationSystemPrompt(){
     "Du pruefst Uploads fuer eine 3D-Druckerei, bevor daraus ein Modell erzeugt wird.",
     "Der Kunde soll den Gegenstand fotografieren, den er gedruckt haben moechte.",
     "",
+    "Liegt kein Bild vor, beurteile nur die Beschreibung; die Bildkriterien entfallen dann.",
+    "",
     "Setze erlaubt=false, wenn eines davon zutrifft:",
     "- Auf dem Bild ist ein Mensch erkennbar — Gesicht oder Koerper, ganz oder teilweise,",
     "  Erwachsener oder Kind, auch im Hintergrund. Kategorie: person.",
@@ -376,17 +378,40 @@ function moderationSystemPrompt(){
   ].join("\n");
 }
 
+// Der Ablehnungstext kommt aus dem Code, nicht vom Modell: Haiku formuliert sonst "lade ein
+// anderes Foto hoch", auch wenn gar keines dabei war. Die Kategorie liefert es zuverlaessig,
+// die Formulierung nicht — also hier festlegen.
+function ablehnText(kategorie, mitBild){
+  switch (kategorie){
+    case "person":
+      return "Auf dem Bild ist eine Person zu erkennen. Bitte fotografiere nur den Gegenstand, den du gedruckt haben moechtest.";
+    case "sexuell":
+    case "gewalt":
+    case "hass":
+      return mitBild
+        ? "Das laesst sich so leider nicht umsetzen. Bitte waehl ein anderes Bild und beschreib einen anderen Gegenstand."
+        : "Das laesst sich so leider nicht umsetzen. Bitte beschreib einen anderen Gegenstand.";
+    case "beschreibung":
+      return "Deine Beschreibung laesst sich so nicht umsetzen. Bitte formuliere sie anders.";
+    default:
+      return mitBild
+        ? "Dieser Upload laesst sich nicht verarbeiten. Bitte fotografiere nur den Gegenstand, den du gedruckt haben moechtest."
+        : "Das laesst sich so nicht umsetzen. Bitte beschreib den Gegenstand anders.";
+  }
+}
+
 function bildBlock(bild){
   return { type: "image", source: { type: "base64", media_type: bild.media_type, data: bild.data } };
 }
 
-function buildModerationBody(description, bild, model = ANTHROPIC_MODEL){
+function buildModerationBody(description, bild = null, model = ANTHROPIC_MODEL){
   const body = {
     model,
     max_tokens: 2000,
     system: moderationSystemPrompt(),
-    // Bild vor Text, wie von der API empfohlen.
-    messages: [{ role: "user", content: [bildBlock(bild), { type: "text", text: description }] }],
+    // Bild vor Text, wie von der API empfohlen. Ohne Bild wird nur der Text beurteilt.
+    messages: [{ role: "user",
+      content: bild ? [bildBlock(bild), { type: "text", text: description }] : description }],
     output_config: { format: { type: "json_schema", schema: moderationSchema() } }
   };
   if (!/haiku/i.test(model)) body.output_config.effort = "low";
@@ -602,11 +627,15 @@ async function handleModel(req, res){
     res.end(JSON.stringify({ok:false, error:`Bitte beschreib in ein bis zwei Saetzen, was gedruckt werden soll (hoechstens ${AI_DESC_MAX} Zeichen).`}));
     return;
   }
-  const bildFehler = pruefeBild(payload.image);
-  if (bildFehler){
-    res.writeHead(400, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:false, error:bildFehler}));
-    return;
+  // Das Bild ist optional: ohne eines wird allein aus der Beschreibung erzeugt.
+  const bild = payload.image ? payload.image : null;
+  if (bild){
+    const bildFehler = pruefeBild(bild);
+    if (bildFehler){
+      res.writeHead(400, {"Content-Type":"application/json"});
+      res.end(JSON.stringify({ok:false, error:bildFehler}));
+      return;
+    }
   }
   if (!ANTHROPIC_API_KEY){
     res.writeHead(500, {"Content-Type":"application/json"});
@@ -618,11 +647,10 @@ async function handleModel(req, res){
   // eigenem Fehler durchwinkt, ist keines.
   let pruefung;
   try {
-    const data = await callAnthropic(buildModerationBody(description, payload.image));
+    const data = await callAnthropic(buildModerationBody(description, bild));
     if (data.stop_reason === "refusal"){
       res.writeHead(422, {"Content-Type":"application/json"});
-      res.end(JSON.stringify({ok:false, kategorie:"sonstiges",
-        error:"Dieser Upload laesst sich nicht verarbeiten. Bitte fotografiere nur den Gegenstand, den du gedruckt haben moechtest."}));
+      res.end(JSON.stringify({ok:false, kategorie:"sonstiges", error:ablehnText("sonstiges", !!bild)}));
       return;
     }
     const block = (data.content || []).find(b => b.type === "text");
@@ -638,13 +666,13 @@ async function handleModel(req, res){
     console.error("Upload abgelehnt, Kategorie:", pruefung.kategorie);
     res.writeHead(422, {"Content-Type":"application/json"});
     res.end(JSON.stringify({ok:false, kategorie:pruefung.kategorie,
-      error:String(pruefung.hinweis || "Dieser Upload laesst sich nicht verarbeiten.").slice(0,500)}));
+      error:ablehnText(pruefung.kategorie, !!bild)}));
     return;
   }
 
   // Schritt 2: erst jetzt das Modell.
   try {
-    const data = await callAnthropic(buildScadRequestBody(description, ANTHROPIC_MODEL, payload.image));
+    const data = await callAnthropic(buildScadRequestBody(description, ANTHROPIC_MODEL, bild));
     if (data.stop_reason === "refusal"){
       res.writeHead(422, {"Content-Type":"application/json"});
       res.end(JSON.stringify({ok:false, error:"Dazu laesst sich kein Modell erzeugen. Bitte beschreib es anders."}));
@@ -777,4 +805,4 @@ module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRat
                    buildSchema, systemPrompt, buildRequestBody,
                    scadSchema, scadSystemPrompt, buildScadRequestBody, sanitizeScad,
                    pruefeBild, moderationSchema, moderationSystemPrompt, buildModerationBody,
-                   modelLimitCheck };
+                   modelLimitCheck, ablehnText };
