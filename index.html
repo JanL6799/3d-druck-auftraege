@@ -212,6 +212,21 @@
   <!-- LINKS -->
   <div>
     <div class="card">
+      <h3>Foto hochladen statt Datei</h3>
+      <p class="sub">Du hast kein 3D-Modell? Fotografier den Gegenstand oder wähl ein Bild aus
+        deiner Mediathek, beschreib kurz was du brauchst — wir erzeugen daraus ein Modell.
+        Bitte nur den Gegenstand, keine Personen im Bild.</p>
+      <input type="file" id="fotoFile" accept="image/*">
+      <img id="fotoVorschau" alt="" style="display:none;max-width:180px;border-radius:12px;margin-top:10px">
+      <textarea id="fotoWish" rows="2" style="margin-top:10px"
+                placeholder="z. B. So eine Halterung, aber 60 mm breit und für ein 20-mm-Rohr"></textarea>
+      <div class="stack" style="margin-top:10px">
+        <button id="btnFoto">Modell erzeugen lassen</button>
+      </div>
+      <div class="hint" id="fotoOut" style="display:none"></div>
+    </div>
+
+    <div class="card">
       <h3>Modelldatei</h3>
       <p class="sub">STL oder 3MF — beide direkt aus jedem FDM-Slicer.</p>
       <div id="drop">
@@ -984,6 +999,83 @@ async function requestSuggestion(){
   }
 }
 $("btnAi").onclick = requestSuggestion;
+
+/* ---------- Foto hochladen und Modell erzeugen ---------- */
+// Das Bild wird vor dem Hochladen im Browser verkleinert: spart Upload, Token und Wartezeit.
+// Serverseitig wird es nirgends gespeichert.
+const MODEL_API_URL = "/api/model";
+const FOTO_MAX_KANTE = 1568;   // darueber bringt mehr Aufloesung der Bilderkennung nichts
+
+let fotoDaten = null;   // { media_type, data }
+
+function bildVerkleinern(file){
+  return new Promise((resolve, reject) => {
+    // FileReader liefert eine Data-URL; die funktioniert auch, wenn die Seite per Doppelklick
+    // unter file:// laeuft, wo Blob-URLs je nach Browser Aerger machen.
+    const leser = new FileReader();
+    leser.onerror = () => reject(new Error("Das Bild liess sich nicht lesen."));
+    leser.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const f = Math.min(1, FOTO_MAX_KANTE / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width  = Math.round(img.width  * f);
+      c.height = Math.round(img.height * f);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      const dataUrl = c.toDataURL("image/jpeg", 0.85);
+      resolve({ media_type: "image/jpeg", data: dataUrl.split(",")[1], vorschau: dataUrl });
+    };
+    img.onerror = () => reject(new Error("Das Bild liess sich nicht lesen."));
+    img.src = leser.result;
+    };
+    leser.readAsDataURL(file);
+  });
+}
+
+$("fotoFile").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  const out = $("fotoOut");
+  if (!f) return;
+  try {
+    const b = await bildVerkleinern(f);
+    fotoDaten = { media_type: b.media_type, data: b.data };
+    $("fotoVorschau").src = b.vorschau;
+    $("fotoVorschau").style.display = "block";
+    out.style.display = "none";
+  } catch (err){
+    fotoDaten = null;
+    out.style.display = "block";
+    out.textContent = err.message;
+  }
+});
+
+$("btnFoto").onclick = async () => {
+  const out = $("fotoOut"), btn = $("btnFoto");
+  const wunsch = $("fotoWish").value.trim();
+  out.style.display = "block";
+  if (!fotoDaten){ out.textContent = "Bitte wähl zuerst ein Foto aus."; return; }
+  if (!wunsch){ out.textContent = "Bitte beschreib kurz, was daraus werden soll."; return; }
+
+  btn.disabled = true;
+  out.textContent = "Bild wird geprüft und das Modell erzeugt — das dauert einen Moment …";
+  try {
+    const res = await fetch(MODEL_API_URL, {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
+      body: JSON.stringify({ description: wunsch, image: fotoDaten })
+    });
+    const data = await res.json();
+    if (!data.ok){ out.textContent = data.error || "Das hat nicht geklappt."; return; }
+
+    const bytes = Uint8Array.from(atob(data.stl), c => c.charCodeAt(0));
+    await loadFile(new File([bytes], data.name + ".stl"));
+    out.textContent = data.reason || "Modell erzeugt.";
+  } catch (e){
+    out.textContent = "Der Dienst ist gerade nicht erreichbar. Du kannst stattdessen eine fertige Datei hochladen.";
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 /* ---------- Speichern / Laden ---------- */
 // Kalkulationsbasis (pWatt…bz) und die restlichen Auftragsdaten (platform/orderId/buyer/due)
