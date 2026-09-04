@@ -23,7 +23,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `server/api-server.js` | Optionaler API-Server auf dem Pi (Backup, Mail-Versand, Kalkulationsbasis), siehe unten |
 | `deploy/setup-mail-feature.sh` | Einmal-Setup-Skript für den Resend-Mailversand auf dem Pi (systemd-Unit + nginx-Route + Webroot-Kopie), siehe „Deployment" |
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
-| `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien), siehe „Deployment“ |
+| `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
 | `tests/e2e.mjs` | 37 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
@@ -603,6 +603,13 @@ Zweite Runde:
 `POST /api/ai-suggest` nimmt Beschreibung und Farbpalette entgegen und liefert Material,
 Farbe, Infill, Schichthöhe, Wandstärke, Notiz und Begründung zurück. Eingerichtet wird das
 mit `deploy/setup-ki-vorschlag.sh` (fragt Key und Modell ab).
+
+**Stufenweise ausrollen:** `sudo bash deploy/setup-ki-vorschlag.sh --nur-backend` setzt Key
+und Route nur für die Heimnetz-Site und lässt `drucken.luetje.me` komplett in Ruhe — keine
+nginx-Route, alte `index.html` im Webroot, Kunden sehen den Knopf nicht. Zum Ausprobieren
+unter `http://<Pi-LAN-IP>:8080/`. Passt es, dasselbe Skript ohne den Schalter noch einmal
+laufen lassen. Der Key darf dabei schon gesetzt sein: ohne die öffentliche nginx-Route ist
+`/api/ai-suggest` von außen gar nicht erreichbar.
 
 Die Karte steckt in **beiden** Seiten: in `index.html` für den Kunden, in `backend.html`
 damit Jan in Ruhe ausprobieren kann, ohne die Kundenseite anzufassen. Der Code ist
