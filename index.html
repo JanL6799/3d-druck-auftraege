@@ -212,14 +212,15 @@
   <!-- LINKS -->
   <div>
     <div class="card">
-      <h3>Foto hochladen statt Datei</h3>
-      <p class="sub">Du hast kein 3D-Modell? Fotografier den Gegenstand oder wähl ein Bild aus
-        deiner Mediathek, beschreib kurz was du brauchst — wir erzeugen daraus ein Modell.
-        Bitte nur den Gegenstand, keine Personen im Bild.</p>
+      <h3>Modell erzeugen lassen</h3>
+      <p class="sub">Du hast kein 3D-Modell? Beschreib einfach, was du brauchst — mit Maßen wird
+        es am besten. Ein Foto ist <b>freiwillig</b> und hilft uns zu verstehen, welche Form du
+        meinst. Bitte dann nur den Gegenstand fotografieren, keine Personen im Bild.</p>
+      <textarea id="fotoWish" rows="2"
+                placeholder="z. B. Distanzhülse, außen 20 mm, innen 8 mm, 15 mm hoch"></textarea>
+      <p class="sub" style="margin-top:10px">Foto dazulegen (optional):</p>
       <input type="file" id="fotoFile" accept="image/*">
       <img id="fotoVorschau" alt="" style="display:none;max-width:180px;border-radius:12px;margin-top:10px">
-      <textarea id="fotoWish" rows="2" style="margin-top:10px"
-                placeholder="z. B. So eine Halterung, aber 60 mm breit und für ein 20-mm-Rohr"></textarea>
       <div class="stack" style="margin-top:10px">
         <button id="btnFoto">Modell erzeugen lassen</button>
       </div>
@@ -1030,16 +1031,18 @@ $("btnFoto").onclick = async () => {
   const out = $("fotoOut"), btn = $("btnFoto");
   const wunsch = $("fotoWish").value.trim();
   out.style.display = "block";
-  if (!fotoDaten){ out.textContent = "Bitte wähl zuerst ein Foto aus."; return; }
-  if (!wunsch){ out.textContent = "Bitte beschreib kurz, was daraus werden soll."; return; }
+  if (!wunsch){ out.textContent = "Bitte beschreib kurz, was gedruckt werden soll."; return; }
 
   btn.disabled = true;
-  out.textContent = "Bild wird geprüft und das Modell erzeugt — das dauert einen Moment …";
+  out.textContent = fotoDaten
+    ? "Bild wird geprüft und das Modell erzeugt — das dauert einen Moment …"
+    : "Modell wird erzeugt — das dauert einen Moment …";
   try {
     const res = await fetch(MODEL_API_URL, {
       method: "POST",
       headers: { "Content-Type":"application/json", "X-Backup-Secret": BACKUP_SECRET },
-      body: JSON.stringify({ description: wunsch, image: fotoDaten })
+      // Ohne Foto geht nur die Beschreibung raus — der Server kommt damit klar.
+      body: JSON.stringify(fotoDaten ? { description: wunsch, image: fotoDaten } : { description: wunsch })
     });
     const data = await res.json();
     if (!data.ok){ out.textContent = data.error || "Das hat nicht geklappt."; return; }

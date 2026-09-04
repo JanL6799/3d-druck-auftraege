@@ -793,6 +793,31 @@ await test('Kunden werden auf die Notizen für Sonderwünsche hingewiesen', asyn
   assert.match(txt, /Notizen/);
 });
 
+await test('Modell nur aus Text, ganz ohne Foto', async () => {
+  const stlText = boxSTL(10,10,10);
+  const call = await page.evaluate(async ({stlText}) => {
+    fotoDaten = null;                       // kein Bild ausgewaehlt
+    const orig = window.fetch;
+    let captured = null;
+    window.fetch = async (url, opts) => {
+      if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
+      captured = JSON.parse(opts.body);
+      return { ok:true, json: async () => ({ok:true,
+        name:'huelse', scad:'d = 20;', reason:'Huelse nach Beschreibung.', stl: btoa(stlText) }) };
+    };
+    document.getElementById('fotoWish').value = 'Distanzhülse, außen 20 mm, innen 8 mm';
+    document.getElementById('btnFoto').click();
+    await new Promise(r => setTimeout(r, 700));
+    window.fetch = orig;
+    return captured;
+  }, {stlText});
+
+  assert.match(call.description, /Distanzhülse/);
+  assert.equal(call.image, undefined, 'ohne Foto darf kein image-Feld mitgehen');
+  assert.equal(await text('#rVol'), '1,0 cm³');
+  assert.match(await text('#fotoOut'), /nach Beschreibung/);
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });
