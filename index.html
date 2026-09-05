@@ -121,6 +121,8 @@
         background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-9px;cursor:grab}
   input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.06)}
   .sliderhead{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}
+  .slidrange{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+  .fieldhint{font-size:12px;color:var(--muted);margin:5px 0 0;line-height:1.45}
   .sliderhead span:first-child{font-size:12px;font-weight:500;color:var(--muted)}
   .sliderhead span:last-child{font-size:15px;font-weight:550;font-variant-numeric:tabular-nums}
 
@@ -264,15 +266,24 @@
 
     <div class="card" id="cardSettings">
       <h3>Druckeinstellungen</h3>
-      <p class="sub">Bestimmen Materialbedarf, Druckzeit und damit den Preis.</p>
+      <p class="sub">Bestimmen Materialbedarf, Druckzeit und damit den Preis. Das Modell selbst
+        wird dabei nicht verändert — nur, wie es gedruckt wird.</p>
       <div class="row">
         <div>
           <div class="sliderhead"><span>Füllung (Infill)</span><span id="lInfill">20 %</span></div>
           <input type="range" id="infill" min="0" max="100" step="5" value="20">
+          <div class="slidrange"><span>0 % (hohl)</span><span>100 % (massiv)</span></div>
+          <p class="fieldhint">Wie viel Material im Inneren steckt. Mehr Füllung = stabiler,
+            aber schwerer, teurer und langsamer. 15–20 % reichen für Deko, 30–50 % für belastete
+            Teile.</p>
         </div>
         <div>
           <div class="sliderhead"><span>Schichthöhe</span><span id="lLayer">0,20 mm</span></div>
           <input type="range" id="layer" min="0.08" max="0.32" step="0.04" value="0.2">
+          <div class="slidrange"><span>0,08 mm (fein)</span><span>0,32 mm (grob)</span></div>
+          <p class="fieldhint">Dicke jeder gedruckten Schicht. Kleiner = glattere Oberfläche und
+            mehr Details, aber deutlich längere Druckzeit. Größer = schneller und günstiger,
+            dafür sichtbare Rillen.</p>
         </div>
       </div>
       <div class="row3">
@@ -284,9 +295,18 @@
             <option value="4">4 Linien · 1,6 mm</option>
             <option value="5">5 Linien · 2,0 mm</option>
           </select>
+          <p class="fieldhint">Dicke der Außenwände. Mehr Linien machen das Teil stabiler und
+            dichter, brauchen aber mehr Material.</p>
         </div>
-        <div><label for="qty">Stückzahl</label><input id="qty" type="number" min="1" step="1" value="1"></div>
-        <div><label for="scale">Skalierung %</label><input id="scale" type="number" min="10" max="500" step="1" value="100"></div>
+        <div>
+          <label for="qty">Stückzahl</label><input id="qty" type="number" min="1" step="1" value="1">
+          <p class="fieldhint">Wie oft das Teil gedruckt wird. Vervielfacht den Preis.</p>
+        </div>
+        <div>
+          <label for="scale">Skalierung %</label><input id="scale" type="number" min="10" max="500" step="1" value="100">
+          <p class="fieldhint">Vergrößert oder verkleinert das ganze Modell (10–500 %). 100 % =
+            Originalgröße. Ändert Materialbedarf und Druckzeit spürbar.</p>
+        </div>
       </div>
     </div>
   </div>
