@@ -283,6 +283,29 @@ test('Keine Usage -> keine Kosten', () => {
   assert.equal(api.kostenEur(null, 'claude-haiku-4-5'), 0);
 });
 
+/* ---------- Drei Varianten ---------- */
+
+test('Varianten-Schema verlangt ein variants-Array aus name/scad/reason', () => {
+  const sc = api.scadVariantsSchema();
+  assert.equal(sc.properties.variants.type, 'array');
+  assert.deepEqual(sc.properties.variants.items.required, ['name','scad','reason']);
+  assert.equal(sc.properties.variants.items.additionalProperties, false);
+});
+
+test('Varianten-Body verlangt genau drei und setzt das Schema', () => {
+  const b = api.buildVariantsBody('Halterung');
+  assert.match(b.system, /GENAU DREI verschiedene Varianten/);
+  assert.equal(b.output_config.format.schema.properties.variants.type, 'array');
+  assert.equal(typeof b.messages[0].content, 'string');
+});
+
+test('Varianten-Body nimmt ein Bild mit auf, wenn vorhanden', () => {
+  const jpeg = Buffer.from([0xFF,0xD8,0xFF,0xE0]).toString('base64');
+  const b = api.buildVariantsBody('x', {media_type:'image/jpeg', data:jpeg});
+  assert.equal(b.messages[0].content[0].type, 'image');
+  assert.match(b.system, /Foto des gewuenschten Teils/);
+});
+
 for (const [s, n] of results) console.log(s, n);
 if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);

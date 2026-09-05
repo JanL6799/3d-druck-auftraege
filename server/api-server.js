@@ -327,6 +327,43 @@ function bucheSpend(usage, model){
   try { fs.writeFileSync(CREDIT_FILE, JSON.stringify(c)); } catch(e){ console.error("credit.json:", e.message); }
 }
 
+// Drei Varianten aus EINEM Aufruf: ein Array von je {name, scad, reason}.
+function scadVariantsSchema(){
+  return {
+    type: "object",
+    properties: {
+      variants: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { name:{type:"string"}, scad:{type:"string"}, reason:{type:"string"} },
+          required: ["name","scad","reason"],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ["variants"],
+    additionalProperties: false
+  };
+}
+
+function buildVariantsBody(description, bild = null, model = ANTHROPIC_MODEL){
+  const zusatz = "\n\nLiefere GENAU DREI verschiedene Varianten desselben Teils als variants-Array. " +
+    "Jede erfuellt die Beschreibung, unterscheidet sich aber spuerbar — etwa in Form, Proportionen, " +
+    "Befestigung oder Stil. name je Variante kurz und unterscheidbar. Alle drei muessen druckbar sein." +
+    (bild ? "\n\nDu siehst zusaetzlich ein Foto des gewuenschten Teils; nutze es fuer die Form." : "");
+  const body = {
+    model,
+    max_tokens: 12000,   // drei Skripte in einer Antwort
+    system: scadSystemPrompt() + zusatz,
+    messages: [{ role: "user",
+      content: bild ? [bildBlock(bild), { type: "text", text: description }] : description }],
+    output_config: { format: { type: "json_schema", schema: scadVariantsSchema() } }
+  };
+  if (!/haiku/i.test(model)) body.output_config.effort = "low";
+  return body;
+}
+
 async function callAnthropic(body){
   for (let attempt = 0; attempt < 2; attempt++){
     const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -715,9 +752,9 @@ async function handleModel(req, res){
     return;
   }
 
-  // Schritt 2: erst jetzt das Modell.
+  // Schritt 2: drei Varianten erzeugen und einzeln rendern.
   try {
-    const data = await callAnthropic(buildScadRequestBody(description, ANTHROPIC_MODEL, bild));
+    const data = await callAnthropic(buildVariantsBody(description, bild));
     if (data.stop_reason === "refusal"){
       res.writeHead(422, {"Content-Type":"application/json"});
       res.end(JSON.stringify({ok:false, error:"Dazu laesst sich kein Modell erzeugen. Bitte beschreib es anders."}));
@@ -727,24 +764,28 @@ async function handleModel(req, res){
       throw new Error("Die Antwort wurde abgeschnitten. Bitte beschreib ein einfacheres Teil.");
     const block = (data.content || []).find(b => b.type === "text");
     if (!block) throw new Error("Antwort ohne Textblock.");
-    const sug = JSON.parse(block.text);
+    const parsed = JSON.parse(block.text);
+    const roh = Array.isArray(parsed.variants) ? parsed.variants.slice(0, 3) : [];
 
-    const schlecht = sanitizeScad(sug.scad);
-    if (schlecht){
-      res.writeHead(422, {"Content-Type":"application/json"});
-      res.end(JSON.stringify({ok:false, error:schlecht}));
-      return;
+    // Sequenziell rendern (haelt die Parallelbremse ein); fehlerhafte Varianten ueberspringen.
+    const variants = [];
+    for (const v of roh){
+      if (sanitizeScad(v.scad)) continue;
+      try {
+        const stl = await renderScad(v.scad);
+        variants.push({
+          name:   String(v.name || "modell").replace(/[^a-z0-9-]/gi, "").slice(0,60) || "modell",
+          scad:   v.scad,
+          reason: String(v.reason || "").trim().slice(0,500),
+          stl:    stl.toString("base64")
+        });
+      } catch(e){ console.error("Variante uebersprungen:", e.message); }
     }
+    if (!variants.length) throw new Error("Keine der Varianten liess sich rendern.");
 
-    const stl = await renderScad(sug.scad);
     res.writeHead(200, {"Content-Type":"application/json"});
-    res.end(JSON.stringify({ok:true,
-      name:    String(sug.name || "modell").replace(/[^a-z0-9-]/gi, "").slice(0,60) || "modell",
-      scad:    sug.scad,
-      reason:  String(sug.reason || "").trim().slice(0,500),
-      hinweis: String(pruefung.hinweis || "").trim().slice(0,300),
-      stl:     stl.toString("base64")
-    }));
+    res.end(JSON.stringify({ok:true, variants,
+      hinweis: String(pruefung.hinweis || "").trim().slice(0,300) }));
   } catch (e){
     res.writeHead(502, {"Content-Type":"application/json"});
     res.end(JSON.stringify({ok:false, error:"Das Modell hat nicht geklappt: " + e.message}));
@@ -813,5 +854,6 @@ if (require.main === module){
 module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRateLimit,
                    buildSchema, systemPrompt, buildRequestBody,
                    scadSchema, scadSystemPrompt, buildScadRequestBody, sanitizeScad,
+                   scadVariantsSchema, buildVariantsBody,
                    pruefeBild, moderationSchema, moderationSystemPrompt, buildModerationBody,
                    modelLimitCheck, ablehnText, kostenEur, preisFuer };
