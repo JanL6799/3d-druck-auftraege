@@ -805,6 +805,13 @@ await test('Hilfe-Knopf öffnet eine Mail an Jan', async () => {
   assert.match(href, /subject=/, 'mit Betreff');
 });
 
+await test('Regler zeigen einen sichtbaren Füllstand (--pct)', async () => {
+  await page.evaluate(() => { const el=document.getElementById('infill');
+    el.value=60; el.dispatchEvent(new Event('input',{bubbles:true})); });
+  const pct = await page.$eval('#infill', el => el.style.getPropertyValue('--pct'));
+  assert.equal(pct, '60.0%', 'Infill 60 -> Fuellstand 60%');
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });

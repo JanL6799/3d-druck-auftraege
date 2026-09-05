@@ -756,6 +756,11 @@ Pushover-Default-Benachrichtigung. `/credit` ist **nicht** über nginx öffentli
 - **Thumbnails** rendern in neutralem Grau auf einem Studio-Verlauf — Form zeigen, nicht
   Farbe (die wählt der Kunde separat); ein weißes Modell auf hellem Grund wäre sonst unsichtbar.
 
+- **Backend nachgezogen:** `backend.html` hat denselben neuen Renderer bekommen (nur die
+  realistische Vorschau, keine Varianten — die sind kundenseitig).
+- **Regler-Schiene war unsichtbar:** das eigene Range-Styling stylte nur `::-webkit-`-Track
+  (zu hell, kein Füllstand) und hatte keine `::-moz-`-Regeln. Jetzt gefüllter Teil bis zum
+  Wert (Akzentfarbe per `--pct`, in `sliderFill()` gesetzt) + `::-moz-range-*`. In beiden Seiten.
 - **Drei Varianten je Anfrage:** `POST /api/model` liefert jetzt ein `variants`-Array
   (`[{name, scad, reason, stl}]`) aus **einem** Anthropic-Aufruf (Schema: Array von 3), dann
   werden die Skripte **sequenziell** gerendert (hält die Parallelbremse ein; fehlerhafte

@@ -114,12 +114,18 @@
 
   /* Regler im Apple-Look */
   input[type=range]{-webkit-appearance:none;appearance:none;background:none;border:none;padding:0;
-        height:26px;box-shadow:none}
+        height:26px;box-shadow:none;--pct:20%}
   input[type=range]:focus{box-shadow:none}
-  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line)}
+  /* Gefüllter Teil bis zum Wert (Akzent), Rest in --line — macht die Schiene klar sichtbar */
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
+        background:linear-gradient(90deg,var(--accent) var(--pct),var(--line) var(--pct))}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;
-        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-9px;cursor:grab}
+        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-8px;cursor:grab}
   input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.06)}
+  input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-radius:50%;
+        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);cursor:grab}
   .sliderhead{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}
   #variantenGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
   @media(max-width:560px){ #variantenGrid{grid-template-columns:1fr} }
@@ -997,8 +1003,14 @@ function drawSwatches(){
 }
 
 /* ---------- Eingaben ---------- */
-$("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
-$("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
+// Füllstand der Schiene aus min/max/value als Prozent für den Farbverlauf.
+function sliderFill(el){
+  const mn=+el.min, mx=+el.max, v=+el.value;
+  el.style.setProperty("--pct", ((v-mn)/((mx-mn)||1)*100).toFixed(1)+"%");
+}
+$("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; sliderFill(e.target); render(); };
+$("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; sliderFill(e.target); render(); };
+sliderFill($("infill")); sliderFill($("layer"));
 ["walls","qty","scale","ship"].forEach(id => $(id).addEventListener("input", render));
 
 
@@ -1204,6 +1216,7 @@ function applyState(d){
   }
   $("lInfill").textContent = $("infill").value+" %";
   $("lLayer").textContent  = num(+$("layer").value,2)+" mm";
+  sliderFill($("infill")); sliderFill($("layer"));
   drawSwatches(); render();
 }
 

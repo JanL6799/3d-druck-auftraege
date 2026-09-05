@@ -108,12 +108,17 @@
 
   /* Regler im Apple-Look */
   input[type=range]{-webkit-appearance:none;appearance:none;background:none;border:none;padding:0;
-        height:26px;box-shadow:none}
+        height:26px;box-shadow:none;--pct:20%}
   input[type=range]:focus{box-shadow:none}
-  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line)}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
+        background:linear-gradient(90deg,var(--accent) var(--pct),var(--line) var(--pct))}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;
-        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-9px;cursor:grab}
+        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-8px;cursor:grab}
   input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.06)}
+  input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-radius:50%;
+        background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);cursor:grab}
   .sliderhead{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}
   .sliderhead span:first-child{font-size:12px;font-weight:500;color:var(--muted)}
   .sliderhead span:last-child{font-size:15px;font-weight:550;font-variant-numeric:tabular-nums}
@@ -997,47 +1002,63 @@ function draw(){
   const S = Math.min(W,H) * 0.62 * zoom, ox = W/2, oy = H/2;
   const n = view.length/9;
   const depth = new Float32Array(n), idx = new Uint32Array(n);
-  const px = new Float32Array(n*6), sh = new Float32Array(n), area = new Float32Array(n);
+  const px = new Float32Array(n*6);
+  const nx = new Float32Array(n), ny = new Float32Array(n), nz = new Float32Array(n);
+  let minY = 1e9, footR = 0;
 
   for (let i=0;i<n;i++){
-    let dz=0; const p=[];
-    for (let v=0;v<3;v++){
-      const o=i*9+v*3;
+    let dz=0;
+    const X=[0,0,0], Y=[0,0,0], Z=[0,0,0];
+    for (let t=0;t<3;t++){
+      const o=i*9+t*3;
       const x=view[o], y=view[o+1], z=view[o+2];
       const x1 =  x*cy + z*sy, z1 = -x*sy + z*cy;
       const y1 =  y*cx - z1*sx, z2 =  y*sx + z1*cx;
-      p.push(ox + x1*S, oy - y1*S); dz += z2;
+      X[t]=x1; Y[t]=y1; Z[t]=z2;
+      px[i*6+t*2] = ox + x1*S; px[i*6+t*2+1] = oy - y1*S;
+      dz += z2;
+      if (y1 < minY) minY = y1;
+      const rr = Math.hypot(x1, z2); if (rr > footR) footR = rr;
     }
-    for (let k=0;k<6;k++) px[i*6+k] = p[k];
     depth[i] = dz/3; idx[i] = i;
-    const ux=p[2]-p[0], uy=p[3]-p[1], vx=p[4]-p[0], vy=p[5]-p[1];
-    const cross = ux*vy - uy*vx;
-    const len = Math.hypot(ux,uy) * Math.hypot(vx,vy) || 1;
-    sh[i] = 0.42 + 0.58 * Math.min(1, Math.abs(cross)/len);
-    area[i] = Math.abs(cross) / 2;
+    const e1x=X[1]-X[0], e1y=Y[1]-Y[0], e1z=Z[1]-Z[0];
+    const e2x=X[2]-X[0], e2y=Y[2]-Y[0], e2z=Z[2]-Z[0];
+    let Nx=e1y*e2z-e1z*e2y, Ny=e1z*e2x-e1x*e2z, Nz=e1x*e2y-e1y*e2x;
+    const L=Math.hypot(Nx,Ny,Nz)||1; Nx/=L; Ny/=L; Nz/=L;
+    if (Nz < 0){ Nx=-Nx; Ny=-Ny; Nz=-Nz; }
+    nx[i]=Nx; ny[i]=Ny; nz[i]=Nz;
   }
 
   idx.sort((a,b) => depth[a]-depth[b]);
+
+  const groundY = oy - minY*S;
+  const rx = Math.max(20, footR*S*0.95), ryv = Math.max(6, footR*S*0.22);
+  const grad = ctx.createRadialGradient(ox, groundY, 0, ox, groundY, rx);
+  grad.addColorStop(0, "rgba(0,0,0,.28)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save(); ctx.translate(ox, groundY); ctx.scale(1, ryv/rx); ctx.translate(-ox,-groundY);
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(ox, groundY, rx, 0, 7); ctx.fill(); ctx.restore();
+
   const [cr,cg,cb] = hex2rgb(color.c);
-  // Additiver Lichtanteil, sonst bleiben dunkle Filamente eine flache Silhouette
-  const lit = (c,l) => Math.min(255, c*(0.4+0.6*l) + 58*l) | 0;
+  const Lx=-0.35, Ly=0.62, Lz=0.70; const Ll=Math.hypot(Lx,Ly,Lz);
+  const lx=Lx/Ll, ly=Ly/Ll, lz=Lz/Ll;
+  const hx=lx, hy=ly, hz=lz+1; const Hl=Math.hypot(hx,hy,hz); const Hx=hx/Hl,Hy=hy/Hl,Hz=hz/Hl;
   for (let j=0;j<n;j++){
-    const i = idx[j], l = sh[i];
-    ctx.fillStyle = `rgb(${lit(cr,l)},${lit(cg,l)},${lit(cb,l)})`;
+    const i = idx[j];
+    const ndl = Math.max(0, nx[i]*lx + ny[i]*ly + nz[i]*lz);
+    let ndh = nx[i]*Hx + ny[i]*Hy + nz[i]*Hz; ndh = ndh>0 ? ndh : 0;
+    const spec = Math.pow(ndh, 26) * 0.55;
+    const amb = 0.26 + 0.10*ny[i];
+    const sh = amb + 0.82*ndl;
+    const r = Math.min(255, cr*sh + 42*ndl + 235*spec) | 0;
+    const g = Math.min(255, cg*sh + 42*ndl + 235*spec) | 0;
+    const b = Math.min(255, cb*sh + 42*ndl + 235*spec) | 0;
+    ctx.fillStyle = "rgb("+r+","+g+","+b+")";
     ctx.beginPath();
     ctx.moveTo(px[i*6],px[i*6+1]);
     ctx.lineTo(px[i*6+2],px[i*6+3]);
     ctx.lineTo(px[i*6+4],px[i*6+5]);
     ctx.closePath(); ctx.fill();
-    // Kontur nur bei ausreichend großen Dreiecken — sonst wirken feine Meshes (viele tausend
-    // kleine Dreiecke) durch lauter überlappende Konturlinien wie ein Punkteraster statt
-    // glatter Flächen. Bei wenigen großen Dreiecken (z.B. ein simpler Würfel) bleibt sie sichtbar
-    // und hebt helle Farben (Jade White) vom Hintergrund und dunkle von der eigenen Schattenseite ab.
-    if (area[i] > 10){
-      ctx.strokeStyle = "rgba(0,0,0,.16)";
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-    }
+    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.5; ctx.stroke();
   }
 }
 (function loop(){ if (spin && !drag && view) rotY += 0.006; draw(); requestAnimationFrame(loop); })();
@@ -1130,8 +1151,13 @@ function drawSwatches(){
 }
 
 /* ---------- Eingaben ---------- */
-$("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; render(); };
-$("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; render(); };
+function sliderFill(el){
+  const mn=+el.min, mx=+el.max, v=+el.value;
+  el.style.setProperty("--pct", ((v-mn)/((mx-mn)||1)*100).toFixed(1)+"%");
+}
+$("infill").oninput = e => { $("lInfill").textContent = e.target.value+" %"; sliderFill(e.target); render(); };
+$("layer").oninput  = e => { $("lLayer").textContent  = num(+e.target.value,2)+" mm"; sliderFill(e.target); render(); };
+sliderFill($("infill")); sliderFill($("layer"));
 ["walls","qty","scale","ship","platform","pWatt","pKwh","pMachine","pSetup","pMargin","pVat","bx","by","bz",
  "slicerTime"].forEach(id => $(id).addEventListener("input", render));
 
@@ -1268,6 +1294,7 @@ function applyState(d){
   }
   $("lInfill").textContent = $("infill").value+" %";
   $("lLayer").textContent  = num(+$("layer").value,2)+" mm";
+  sliderFill($("infill")); sliderFill($("layer"));
   drawSwatches(); render();
 }
 
