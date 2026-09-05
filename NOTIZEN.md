@@ -25,6 +25,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `deploy/setup-backend-lokal.sh` | Einmal-Setup-Skript: sperrt backend.html von der öffentlichen Domain weg, macht es nur im Heimnetz erreichbar, siehe „Deployment" |
 | `deploy/setup-ki-vorschlag.sh` | Einmal-Setup für den KI-Vorschlag (Key in die Unit, nginx-Route für **beide** Sites, Webroot-Kopien). Mit `--nur-backend` bleibt die öffentliche Seite unangetastet, siehe „Deployment“ |
 | `dev/serve.mjs` | Nur lokal: liefert `index.html` aus und proxyt `/api/*` an den Dienst, damit beides dieselbe Origin hat (`npm run dev`). Wird nicht deployed |
+| `dev/foto-moderation-testen.sh` | Testet `/api/model` gegen die Live-Domain mit einem echten Foto — sagt an, ob angenommen oder mit welcher Kategorie abgelehnt. Speichert nichts. |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
 | `tests/e2e.mjs` | 45 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
 | `tests/server.mjs` | 37 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
