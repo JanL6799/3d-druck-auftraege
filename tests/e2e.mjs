@@ -753,6 +753,28 @@ await test('Erzeugtes Modell lässt sich als STL herunterladen', async () => {
   assert.equal(dl[0].suggestedFilename(), 'wuerfel.stl');
 });
 
+await test('Zurücksetzen ohne Bestätigung lässt alles stehen', async () => {
+  const r = await page.evaluate(async () => {
+    localStorage.setItem('druckauftrag.v2', 'BEHALTEN');
+    window.confirm = () => false;
+    document.getElementById('btnReset').click();
+    const v = localStorage.getItem('druckauftrag.v2');
+    localStorage.removeItem('druckauftrag.v2');
+    return v;
+  });
+  assert.equal(r, 'BEHALTEN', 'ohne Bestätigung darf nichts gelöscht werden');
+});
+
+await test('Zurücksetzen löscht den gespeicherten Stand und lädt neu', async () => {
+  await page.evaluate(() => {
+    localStorage.setItem('druckauftrag.v2', JSON.stringify({v:2, fields:{infill:'55'}}));
+    window.confirm = () => true;
+  });
+  await Promise.all([ page.waitForEvent('load'), page.click('#btnReset') ]);
+  const nachher = await page.evaluate(() => localStorage.getItem('druckauftrag.v2'));
+  assert.equal(nachher, null, 'gespeicherter Stand muss nach dem Reload weg sein');
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });

@@ -209,6 +209,7 @@
     <button id="btnSave" class="sm"><span class="wide">Stand speichern</span><span class="narrow">Speichern</span></button>
     <button id="btnLoad" class="sm"><span class="wide">Stand laden</span><span class="narrow">Laden</span></button>
     <button id="btnPdf" class="sm"><span class="wide">PDF exportieren</span><span class="narrow">PDF</span></button>
+    <button id="btnReset" class="sm" title="Modell, Eingaben und gespeicherten Stand löschen"><span class="wide">Zurücksetzen</span><span class="narrow">Reset</span></button>
   </div>
 </header>
 
@@ -1083,6 +1084,15 @@ $("btnLoad").onclick = () => {
                 w.textContent="Stand konnte nicht gelesen werden: "+err.message; }
   };
   inp.click();
+};
+
+// Setzt die Seite komplett zurueck: loescht den gespeicherten Stand (das Modell wird sonst
+// beim naechsten Aufruf automatisch wieder geladen) und startet die Seite mit den
+// Standardwerten neu. Das Theme bleibt als reine Anzeige-Einstellung erhalten.
+$("btnReset").onclick = () => {
+  if (!confirm("Wirklich alles zuruecksetzen? Modell, Eingaben und der gespeicherte Stand werden geloescht.")) return;
+  try { localStorage.removeItem(STORE_KEY); } catch(e){}
+  location.reload();
 };
 
 // v1 legte die Einstellungen vermutlich flach ab (statt unter d.fields). Best-effort-Migration:
