@@ -121,6 +121,15 @@
         background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.28);margin-top:-9px;cursor:grab}
   input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.06)}
   .sliderhead{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 2px}
+  #variantenGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:560px){ #variantenGrid{grid-template-columns:1fr} }
+  .vopt{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);
+        cursor:pointer;transition:.15s;display:flex;flex-direction:column;text-align:left;padding:0}
+  .vopt:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .vopt.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+  .vopt img{width:100%;height:130px;object-fit:cover;background:var(--bg)}
+  .vopt .vname{font-weight:600;font-size:14px;padding:9px 11px 2px}
+  .vopt .vreason{font-size:12px;color:var(--muted);padding:0 11px 11px;line-height:1.4}
   .slidrange{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
   .fieldhint{font-size:12px;color:var(--muted);margin:5px 0 0;line-height:1.45}
   .sliderhead span:first-child{font-size:12px;font-weight:500;color:var(--muted)}
@@ -238,6 +247,10 @@
         <button id="btnFoto">Modell erzeugen lassen</button>
       </div>
       <div class="hint" id="fotoOut" style="display:none"></div>
+      <div id="varianten" style="display:none;margin-top:14px">
+        <p class="sub">Wähl eine der drei Varianten — du kannst sie danach drehen und den Preis sehen.</p>
+        <div id="variantenGrid"></div>
+      </div>
       <div class="stack" id="stlBox" style="display:none;margin-top:10px">
         <button id="btnStl" class="sm">STL herunterladen</button>
       </div>
@@ -772,51 +785,59 @@ function render(){
 const cv = $("cv"), ctx = cv.getContext("2d");
 let view = null;
 
+// Zentriert und skaliert ein Dreiecks-Array auf Einheitsgroesse; vereinfacht sehr feine
+// Meshes per Vertex-Clustering. Reine Funktion -> auch fuer Thumbnails nutzbar.
+function viewFromTris(tris){
+  let mn=[1e9,1e9,1e9], mx=[-1e9,-1e9,-1e9];
+  for (let i=0;i<tris.length;i+=3){
+    for (let a=0;a<3;a++){ const val=tris[i+a]; if(val<mn[a])mn[a]=val; if(val>mx[a])mx[a]=val; }
+  }
+  const size=[mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2]];
+  const c=[(mn[0]+mx[0])/2,(mn[1]+mx[1])/2,(mn[2]+mx[2])/2];
+  const k=1/Math.max(size[0],size[1],size[2],1e-6);
+  const total=tris.length/9, MAXT=40000;
+  if (total<=MAXT){
+    const t=new Float32Array(tris.length);
+    for (let i=0;i<tris.length;i+=3){ t[i]=(tris[i]-c[0])*k; t[i+1]=(tris[i+1]-c[1])*k; t[i+2]=(tris[i+2]-c[2])*k; }
+    return { view:t, total, kept:total };
+  }
+  const GRID=28, snap=x=>Math.round(x*GRID)/GRID, seen=new Set(), out=[];
+  for (let tri=0;tri<total;tri++){
+    const s0=tri*9;
+    const ax=snap((tris[s0]-c[0])*k),ay=snap((tris[s0+1]-c[1])*k),az=snap((tris[s0+2]-c[2])*k);
+    const bx=snap((tris[s0+3]-c[0])*k),by=snap((tris[s0+4]-c[1])*k),bz=snap((tris[s0+5]-c[2])*k);
+    const cx=snap((tris[s0+6]-c[0])*k),cy=snap((tris[s0+7]-c[1])*k),cz=snap((tris[s0+8]-c[2])*k);
+    if ((ax===bx&&ay===by&&az===bz)||(ax===cx&&ay===cy&&az===cz)||(bx===cx&&by===cy&&bz===cz)) continue;
+    const key=ax+","+ay+","+az+"|"+bx+","+by+","+bz+"|"+cx+","+cy+","+cz;
+    if (seen.has(key)) continue; seen.add(key);
+    out.push(ax,ay,az,bx,by,bz,cx,cy,cz);
+  }
+  return { view:new Float32Array(out), total, kept:out.length/9 };
+}
+
+// Thumbnail eines STL-Bytes-Arrays als data-URL (statisches Bild, feste Ansicht).
+function thumbFromBytes(bytes){
+  const tris = parseSTL(bytes.buffer ? bytes.buffer : bytes);
+  const { view:v } = viewFromTris(tris);
+  const W=300, H=220, dpr=2;
+  const c = document.createElement("canvas"); c.width=W*dpr; c.height=H*dpr;
+  const cx = c.getContext("2d"); cx.setTransform(dpr,0,0,dpr,0,0);
+  // Studiohintergrund, sonst verschwindet ein weißes Modell auf hellem Grund (wie im
+  // großen Viewer, der seinen Hintergrund per CSS bekommt — das Thumbnail-Canvas nicht).
+  const bg = cx.createRadialGradient(W/2, H*0.28, 0, W/2, H*0.28, W);
+  bg.addColorStop(0, "#f0f0f2"); bg.addColorStop(1, "#d3d3d7");
+  cx.fillStyle = bg; cx.fillRect(0, 0, W, H);
+  paintMesh(cx, v, W, H, 0.7, -0.95, 1, "#a9adb3");   // neutrales Grau: Form zeigen, nicht Farbe
+  return c.toDataURL("image/png");
+}
+
 function buildView(){
-  const {mn,mx,size} = mesh;
-  const c = [ (mn[0]+mx[0])/2, (mn[1]+mx[1])/2, (mn[2]+mx[2])/2 ];
-  const k = 1 / Math.max(...size, 1e-6);
-  const total = mesh.tris.length/9;
-  const MAXT  = 40000;
-
-  if (total <= MAXT){
-    const t = new Float32Array(mesh.tris.length);
-    for (let i=0;i<mesh.tris.length;i+=3){
-      t[i]   = (mesh.tris[i]  -c[0])*k;
-      t[i+1] = (mesh.tris[i+1]-c[1])*k;
-      t[i+2] = (mesh.tris[i+2]-c[2])*k;
-    }
-    view = t;
-    $("vHint").textContent = "Ziehen zum Drehen · Mausrad zum Zoomen";
-    return;
-  }
-
-  // Ab ~40.000 Dreiecken wird die Vorschau vereinfacht (Vertex-Clustering: Ecken auf ein
-  // Gitter runden, entartete/doppelte Dreiecke danach verwerfen), sonst ruckelt der Painter's
-  // Algorithm beim Drehen. Bloßes Überspringen jedes n-ten Dreiecks (frühere Version) half bei
-  // feinteiligen Meshes nicht — lauter subpixelkleine Facetten blieben übrig und wirkten wie
-  // ein Punkteraster statt einer erkennbaren Fläche. Das Verschmelzen benachbarter kleiner
-  // Dreiecke zu größeren liefert stattdessen echte, klar sichtbare Facetten. Die Kalkulation
-  // rechnet immer mit dem vollen Mesh, hiervon unberührt.
-  const GRID = 28;
-  const snap = v => Math.round(v*GRID)/GRID;
-  const seen = new Set();
-  const out = [];
-  for (let tri=0; tri<total; tri++){
-    const s = tri*9;
-    const ax=snap((mesh.tris[s]  -c[0])*k), ay=snap((mesh.tris[s+1]-c[1])*k), az=snap((mesh.tris[s+2]-c[2])*k);
-    const bx=snap((mesh.tris[s+3]-c[0])*k), by=snap((mesh.tris[s+4]-c[1])*k), bz=snap((mesh.tris[s+5]-c[2])*k);
-    const cx=snap((mesh.tris[s+6]-c[0])*k), cy=snap((mesh.tris[s+7]-c[1])*k), cz=snap((mesh.tris[s+8]-c[2])*k);
-    if ((ax===bx&&ay===by&&az===bz) || (ax===cx&&ay===cy&&az===cz) || (bx===cx&&by===cy&&bz===cz)) continue;
-    const key = ax+","+ay+","+az+"|"+bx+","+by+","+bz+"|"+cx+","+cy+","+cz;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(ax,ay,az, bx,by,bz, cx,cy,cz);
-  }
-  view = new Float32Array(out);
-  const kept = out.length/9;
-  $("vHint").textContent = "Ziehen zum Drehen · Mausrad zum Zoomen · Vorschau vereinfacht auf "
-    +kept.toLocaleString("de-DE")+" von "+total.toLocaleString("de-DE")+" Dreiecken";
+  const r = viewFromTris(mesh.tris);
+  view = r.view;
+  $("vHint").textContent = r.kept < r.total
+    ? "Ziehen zum Drehen · Mausrad zum Zoomen · Vorschau vereinfacht auf "
+      + r.kept.toLocaleString("de-DE") + " von " + r.total.toLocaleString("de-DE") + " Dreiecken"
+    : "Ziehen zum Drehen · Mausrad zum Zoomen";
 }
 
 const hex2rgb = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
@@ -828,52 +849,81 @@ function draw(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,W,H);
   if (!view) return;
+  paintMesh(ctx, view, W, H, rotY, rotX, zoom, color.c);
+}
 
+// Rein zeichnend: malt ein normalisiertes Mesh (v) mit gerichtetem Licht, Glanz und
+// Bodenschatten in den gegebenen 2D-Kontext. Wird von der Live-Vorschau UND den
+// Varianten-Thumbnails genutzt.
+function paintMesh(ctx, v, W, H, rotY, rotX, zoom, hex){
   const cy=Math.cos(rotY), sy=Math.sin(rotY), cx=Math.cos(rotX), sx=Math.sin(rotX);
   const S = Math.min(W,H) * 0.62 * zoom, ox = W/2, oy = H/2;
-  const n = view.length/9;
+  const n = v.length/9;
   const depth = new Float32Array(n), idx = new Uint32Array(n);
-  const px = new Float32Array(n*6), sh = new Float32Array(n), area = new Float32Array(n);
+  const px = new Float32Array(n*6), area = new Float32Array(n);
+  const nx = new Float32Array(n), ny = new Float32Array(n), nz = new Float32Array(n);
+  let minY = 1e9, footR = 0;
 
   for (let i=0;i<n;i++){
-    let dz=0; const p=[];
-    for (let v=0;v<3;v++){
-      const o=i*9+v*3;
-      const x=view[o], y=view[o+1], z=view[o+2];
+    let dz=0;
+    // rotierte 3D-Eckpunkte, daraus Bildschirmpunkte und die echte Flaechennormale
+    const X=[0,0,0], Y=[0,0,0], Z=[0,0,0];
+    for (let t=0;t<3;t++){
+      const o=i*9+t*3;
+      const x=v[o], y=v[o+1], z=v[o+2];
       const x1 =  x*cy + z*sy, z1 = -x*sy + z*cy;
       const y1 =  y*cx - z1*sx, z2 =  y*sx + z1*cx;
-      p.push(ox + x1*S, oy - y1*S); dz += z2;
+      X[t]=x1; Y[t]=y1; Z[t]=z2;
+      px[i*6+t*2] = ox + x1*S; px[i*6+t*2+1] = oy - y1*S;
+      dz += z2;
+      if (y1 < minY) minY = y1;
+      const rr = Math.hypot(x1, z2); if (rr > footR) footR = rr;
     }
-    for (let k=0;k<6;k++) px[i*6+k] = p[k];
     depth[i] = dz/3; idx[i] = i;
-    const ux=p[2]-p[0], uy=p[3]-p[1], vx=p[4]-p[0], vy=p[5]-p[1];
-    const cross = ux*vy - uy*vx;
-    const len = Math.hypot(ux,uy) * Math.hypot(vx,vy) || 1;
-    sh[i] = 0.42 + 0.58 * Math.min(1, Math.abs(cross)/len);
-    area[i] = Math.abs(cross) / 2;
+    // Normale aus den rotierten 3D-Kanten (nicht aus der 2D-Projektion wie vorher)
+    const e1x=X[1]-X[0], e1y=Y[1]-Y[0], e1z=Z[1]-Z[0];
+    const e2x=X[2]-X[0], e2y=Y[2]-Y[0], e2z=Z[2]-Z[0];
+    let Nx=e1y*e2z-e1z*e2y, Ny=e1z*e2x-e1x*e2z, Nz=e1x*e2y-e1y*e2x;
+    const L=Math.hypot(Nx,Ny,Nz)||1; Nx/=L; Ny/=L; Nz/=L;
+    if (Nz < 0){ Nx=-Nx; Ny=-Ny; Nz=-Nz; }   // zweiseitig: immer zur Kamera drehen
+    nx[i]=Nx; ny[i]=Ny; nz[i]=Nz;
+    const ux=px[i*6+2]-px[i*6], uy=px[i*6+3]-px[i*6+1], vx=px[i*6+4]-px[i*6], vy=px[i*6+5]-px[i*6+1];
+    area[i] = Math.abs(ux*vy - uy*vx) / 2;
   }
 
   idx.sort((a,b) => depth[a]-depth[b]);
-  const [cr,cg,cb] = hex2rgb(color.c);
-  // Additiver Lichtanteil, sonst bleiben dunkle Filamente eine flache Silhouette
-  const lit = (c,l) => Math.min(255, c*(0.4+0.6*l) + 58*l) | 0;
+
+  // weicher Bodenschatten, erdet das Objekt
+  const groundY = oy - minY*S;
+  const rx = Math.max(20, footR*S*0.95), ryv = Math.max(6, footR*S*0.22);
+  const grad = ctx.createRadialGradient(ox, groundY, 0, ox, groundY, rx);
+  grad.addColorStop(0, "rgba(0,0,0,.28)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save(); ctx.translate(ox, groundY); ctx.scale(1, ryv/rx); ctx.translate(-ox,-groundY);
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(ox, groundY, rx, 0, 7); ctx.fill(); ctx.restore();
+
+  const [cr,cg,cb] = hex2rgb(hex);
+  // Licht von vorne-oben-links, Blickrichtung +z, Halbvektor fuers Glanzlicht
+  const Lx=-0.35, Ly=0.62, Lz=0.70; const Ll=Math.hypot(Lx,Ly,Lz);
+  const lx=Lx/Ll, ly=Ly/Ll, lz=Lz/Ll;
+  const hx=lx, hy=ly, hz=lz+1; const Hl=Math.hypot(hx,hy,hz); const Hx=hx/Hl,Hy=hy/Hl,Hz=hz/Hl;
   for (let j=0;j<n;j++){
-    const i = idx[j], l = sh[i];
-    ctx.fillStyle = `rgb(${lit(cr,l)},${lit(cg,l)},${lit(cb,l)})`;
+    const i = idx[j];
+    const ndl = Math.max(0, nx[i]*lx + ny[i]*ly + nz[i]*lz);
+    let ndh = nx[i]*Hx + ny[i]*Hy + nz[i]*Hz; ndh = ndh>0 ? ndh : 0;
+    const spec = Math.pow(ndh, 26) * 0.55;                 // Kunststoff-Glanz
+    const amb = 0.26 + 0.10*ny[i];                          // Himmel oben heller als Boden
+    const sh = amb + 0.82*ndl;
+    const r = Math.min(255, cr*sh + 42*ndl + 235*spec) | 0;
+    const g = Math.min(255, cg*sh + 42*ndl + 235*spec) | 0;
+    const b = Math.min(255, cb*sh + 42*ndl + 235*spec) | 0;
+    ctx.fillStyle = "rgb("+r+","+g+","+b+")";
     ctx.beginPath();
     ctx.moveTo(px[i*6],px[i*6+1]);
     ctx.lineTo(px[i*6+2],px[i*6+3]);
     ctx.lineTo(px[i*6+4],px[i*6+5]);
     ctx.closePath(); ctx.fill();
-    // Kontur nur bei ausreichend großen Dreiecken — sonst wirken feine Meshes (viele tausend
-    // kleine Dreiecke) durch lauter überlappende Konturlinien wie ein Punkteraster statt
-    // glatter Flächen. Bei wenigen großen Dreiecken (z.B. ein simpler Würfel) bleibt sie sichtbar
-    // und hebt helle Farben (Jade White) vom Hintergrund und dunkle von der eigenen Schattenseite ab.
-    if (area[i] > 10){
-      ctx.strokeStyle = "rgba(0,0,0,.16)";
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-    }
+    // haardünne Kante in Fuellfarbe gegen Aliasing-Ritzen zwischen den Dreiecken
+    ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.5; ctx.stroke();
   }
 }
 (function loop(){ if (spin && !drag && view) rotY += 0.006; draw(); requestAnimationFrame(loop); })();
@@ -1014,6 +1064,36 @@ $("btnStl").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+// Wählt eine Variante: lädt ihr STL in die Vorschau + Kalkulation und aktiviert den Download.
+async function varianteWaehlen(v, kachel){
+  const bytes = Uint8Array.from(atob(v.stl), c => c.charCodeAt(0));
+  await loadFile(new File([bytes], v.name + ".stl"));
+  letztesStl = { bytes, name: v.name + ".stl" };
+  $("stlBox").style.display = "flex";
+  document.querySelectorAll(".vopt").forEach(el => el.classList.remove("sel"));
+  if (kachel) kachel.classList.add("sel");
+}
+
+function zeigeVarianten(variants){
+  const grid = $("variantenGrid");
+  grid.textContent = "";
+  variants.forEach(v => {
+    const el = document.createElement("button");
+    el.className = "vopt"; el.type = "button";
+    let thumb = "";
+    try { thumb = thumbFromBytes(Uint8Array.from(atob(v.stl), c => c.charCodeAt(0))); } catch(e){}
+    el.innerHTML = (thumb ? '<img alt="" src="'+thumb+'">' : '')
+      + '<span class="vname"></span><span class="vreason"></span>';
+    el.querySelector(".vname").textContent = v.name;
+    el.querySelector(".vreason").textContent = v.reason || "";
+    el.onclick = () => varianteWaehlen(v, el);
+    grid.appendChild(el);
+  });
+  $("varianten").style.display = "block";
+  // Die erste Variante gleich laden, damit sofort etwas in der Vorschau steht.
+  if (variants[0]) varianteWaehlen(variants[0], grid.firstChild);
+}
+
 $("btnFoto").onclick = async () => {
   const out = $("fotoOut"), btn = $("btnFoto");
   const wunsch = $("fotoWish").value.trim();
@@ -1021,9 +1101,10 @@ $("btnFoto").onclick = async () => {
   if (!wunsch){ out.textContent = "Bitte beschreib kurz, was gedruckt werden soll."; return; }
 
   btn.disabled = true;
+  $("varianten").style.display = "none"; $("stlBox").style.display = "none";
   out.textContent = fotoDaten
-    ? "Bild wird geprüft und das Modell erzeugt — das dauert einen Moment …"
-    : "Modell wird erzeugt — das dauert einen Moment …";
+    ? "Bild wird geprüft und drei Varianten werden erzeugt — das dauert einen Moment …"
+    : "Drei Varianten werden erzeugt — das dauert einen Moment …";
   try {
     const res = await fetch(MODEL_API_URL, {
       method: "POST",
@@ -1032,13 +1113,11 @@ $("btnFoto").onclick = async () => {
       body: JSON.stringify(fotoDaten ? { description: wunsch, image: fotoDaten } : { description: wunsch })
     });
     const data = await res.json();
-    if (!data.ok){ out.textContent = data.error || "Das hat nicht geklappt."; return; }
-
-    const bytes = Uint8Array.from(atob(data.stl), c => c.charCodeAt(0));
-    await loadFile(new File([bytes], data.name + ".stl"));
-    letztesStl = { bytes, name: data.name + ".stl" };
-    $("stlBox").style.display = "flex";
-    out.textContent = data.reason || "Modell erzeugt.";
+    if (!data.ok || !data.variants || !data.variants.length){
+      out.textContent = data.error || "Das hat nicht geklappt."; return;
+    }
+    out.textContent = data.hinweis || "Drei Varianten erzeugt — wähl eine aus.";
+    zeigeVarianten(data.variants);
   } catch (e){
     out.textContent = "Der Dienst ist gerade nicht erreichbar. Du kannst stattdessen eine fertige Datei hochladen.";
   } finally {

@@ -28,7 +28,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `dev/foto-moderation-testen.sh` | Testet `/api/model` gegen die Live-Domain mit einem echten Foto — sagt an, ob angenommen oder mit welcher Kategorie abgelehnt. Speichert nichts. |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
 | `tests/e2e.mjs` | 45 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
-| `tests/server.mjs` | 41 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
+| `tests/server.mjs` | 44 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -742,6 +742,26 @@ Pushover-Default-Benachrichtigung. `/credit` ist **nicht** über nginx öffentli
   Seite den Wert lädt.
 - **Hilfe-Knopf** im Hero: `mailto:jan@luetje.me` mit Betreff. Button-Styling auf `a.btn`
   erweitert. Kein Backend nötig.
+
+### Realistischere Vorschau + drei Varianten (05.09.2026)
+- **Renderer** (`paintMesh`) hat jetzt echtes gerichtetes Licht (Lambert), ein
+  Kunststoff-Glanzlicht (Blinn-Phong) und einen weichen Bodenschatten — statt der früheren
+  flächenbasierten Pseudo-Schattierung. Zweiseitig (Normale immer zur Kamera), damit auch
+  Meshes mit inkonsistenter Wicklung keine Löcher zeigen.
+- `draw()`, `viewFromTris()`, `thumbFromBytes()` aus dem alten `draw()`/`buildView()`
+  herausgezogen, damit Live-Vorschau und Thumbnails denselben Renderer nutzen.
+- **Falle dabei:** beim Extrahieren hieß der Mesh-Parameter `v` wie der innere
+  Schleifenzähler `for(let v…)` — die Kollision ließ `v[o]` zur Zahl werden, nichts wurde
+  gezeichnet (Haupt-Viewer wie Thumbnails). Zähler auf `t` umbenannt.
+- **Thumbnails** rendern in neutralem Grau auf einem Studio-Verlauf — Form zeigen, nicht
+  Farbe (die wählt der Kunde separat); ein weißes Modell auf hellem Grund wäre sonst unsichtbar.
+
+- **Drei Varianten je Anfrage:** `POST /api/model` liefert jetzt ein `variants`-Array
+  (`[{name, scad, reason, stl}]`) aus **einem** Anthropic-Aufruf (Schema: Array von 3), dann
+  werden die Skripte **sequenziell** gerendert (hält die Parallelbremse ein; fehlerhafte
+  Varianten werden übersprungen, mind. eine muss klappen). Der Client zeigt drei anklickbare
+  Kacheln mit Thumbnail + Begründung; die erste wird automatisch geladen, ein Klick lädt eine
+  andere in Vorschau + Kalkulation. Laufzeit real ~25–30 s (ein Modellaufruf + drei Renders).
 
 ## Offene Punkte
 

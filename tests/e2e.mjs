@@ -614,13 +614,14 @@ await test('Foto zu Modell: Bild und Beschreibung gehen raus, STL landet in der 
     window.fetch = async (url, opts) => {
       if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
       captured = JSON.parse(opts.body);
+      const V = (n) => ({name:n, scad:'x=1;', reason:n+' Begruendung', stl: btoa(stlText)});
       return { ok:true, json: async () => ({ok:true,
-        name:'halterung', scad:'b = 60;', reason:'Halterung nach Foto.',
-        hinweis:'Auf dem Bild ist eine Rohrschelle zu sehen.', stl: btoa(stlText) }) };
+        variants:[V('halterung-a'), V('halterung-b'), V('halterung-c')],
+        hinweis:'Auf dem Bild ist eine Rohrschelle zu sehen.' }) };
     };
     document.getElementById('fotoWish').value = 'So eine Halterung, aber 60 mm breit';
     document.getElementById('btnFoto').click();
-    await new Promise(r => setTimeout(r, 700));
+    await new Promise(r => setTimeout(r, 900));
     window.fetch = orig;
     return captured;
   }, {stlText});
@@ -628,8 +629,31 @@ await test('Foto zu Modell: Bild und Beschreibung gehen raus, STL landet in der 
   assert.match(call.description, /60 mm breit/);
   assert.equal(call.image.media_type, 'image/jpeg');
   assert.ok(call.image.data.length > 0, 'Bilddaten muessen mitgehen');
-  assert.equal(await text('#rVol'), '8,0 cm³', 'STL muss durch den Parser gelaufen sein');
-  assert.match(await text('#fotoOut'), /Halterung nach Foto/);
+  assert.equal(await page.$$eval('#variantenGrid .vopt', els => els.length), 3, 'drei Varianten-Kacheln');
+  assert.equal(await text('#rVol'), '8,0 cm³', 'erste Variante wird automatisch geladen');
+  assert.equal(await page.$$eval('.vopt.sel', els => els.length), 1, 'erste Kachel ist markiert');
+  assert.match(await text('#fotoOut'), /Rohrschelle/);
+});
+
+await test('Andere Variante wählen lädt sie in die Vorschau', async () => {
+  await page.evaluate(async ({a,b}) => {
+    const orig = window.fetch;
+    window.fetch = async (url) => {
+      if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
+      return { ok:true, json: async () => ({ok:true, hinweis:'', variants:[
+        {name:'klein', scad:'x=1;', reason:'', stl: btoa(a)},
+        {name:'gross', scad:'x=1;', reason:'', stl: btoa(b)},
+      ]}) };
+    };
+    document.getElementById('fotoWish').value = 'irgendwas';
+    document.getElementById('btnFoto').click();
+    await new Promise(r => setTimeout(r, 900));
+    window.fetch = orig;
+  }, {a: boxSTL(10,10,10), b: boxSTL(30,30,30)});
+  assert.equal(await text('#rVol'), '1,0 cm³', 'erste (kleine) Variante zuerst');
+  await page.click('#variantenGrid .vopt:nth-child(2)');
+  await page.waitForTimeout(300);
+  assert.equal(await text('#rVol'), '27,0 cm³', 'nach Klick die zweite (große) Variante');
 });
 
 await test('Abgelehntes Bild zeigt den Hinweis und erzeugt kein Modell', async () => {
@@ -693,12 +717,12 @@ await test('Modell nur aus Text, ganz ohne Foto', async () => {
     window.fetch = async (url, opts) => {
       if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
       captured = JSON.parse(opts.body);
-      return { ok:true, json: async () => ({ok:true,
-        name:'huelse', scad:'d = 20;', reason:'Huelse nach Beschreibung.', stl: btoa(stlText) }) };
+      return { ok:true, json: async () => ({ok:true, hinweis:'Drei Varianten erzeugt.',
+        variants:[{name:'huelse', scad:'d=20;', reason:'', stl: btoa(stlText)}] }) };
     };
     document.getElementById('fotoWish').value = 'Distanzhülse, außen 20 mm, innen 8 mm';
     document.getElementById('btnFoto').click();
-    await new Promise(r => setTimeout(r, 700));
+    await new Promise(r => setTimeout(r, 800));
     window.fetch = orig;
     return captured;
   }, {stlText});
@@ -706,7 +730,7 @@ await test('Modell nur aus Text, ganz ohne Foto', async () => {
   assert.match(call.description, /Distanzhülse/);
   assert.equal(call.image, undefined, 'ohne Foto darf kein image-Feld mitgehen');
   assert.equal(await text('#rVol'), '1,0 cm³');
-  assert.match(await text('#fotoOut'), /nach Beschreibung/);
+  assert.match(await text('#fotoOut'), /Varianten/);
 });
 
 await test('Mobile Reihenfolge folgt der Kundenreise', async () => {
@@ -736,12 +760,12 @@ await test('Erzeugtes Modell lässt sich als STL herunterladen', async () => {
     const orig = window.fetch;
     window.fetch = async (url) => {
       if (!String(url).includes('/api/model')) return { ok:true, json: async () => ({ok:true}) };
-      return { ok:true, json: async () => ({ok:true, name:'wuerfel', scad:'cube(20);',
-        reason:'Test.', stl: btoa(stlText) }) };
+      return { ok:true, json: async () => ({ok:true, hinweis:'', variants:[
+        {name:'wuerfel', scad:'cube(20);', reason:'Test.', stl: btoa(stlText)}]}) };
     };
     document.getElementById('fotoWish').value = 'Ein Würfel, 20 mm';
     document.getElementById('btnFoto').click();
-    await new Promise(r => setTimeout(r, 700));
+    await new Promise(r => setTimeout(r, 800));
     window.fetch = orig;
   }, {stlText});
   assert.notEqual(await page.$eval('#stlBox', el => el.style.display), 'none', 'Knopf muss auftauchen');
