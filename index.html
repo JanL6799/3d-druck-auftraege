@@ -101,13 +101,13 @@
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
   @media(max-width:480px){ .row,.row3{grid-template-columns:1fr} }
 
-  button{font:inherit;font-size:15px;font-weight:500;padding:9px 17px;border-radius:100px;
+  button,a.btn{font:inherit;font-size:15px;font-weight:500;padding:9px 17px;border-radius:100px;
          border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;
-         transition:.15s;letter-spacing:-.01em;white-space:nowrap}
-  button:hover{background:var(--bg)}
+         transition:.15s;letter-spacing:-.01em;white-space:nowrap;display:inline-block;text-decoration:none}
+  button:hover,a.btn:hover{background:var(--bg)}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   button.primary:hover{filter:brightness(1.1)}
-  button.sm{font-size:13px;padding:6px 13px}
+  button.sm,a.btn.sm{font-size:13px;padding:6px 13px}
   button.link{border:none;background:none;color:var(--accent);padding:4px 0;font-size:14px}
   button.link:hover{background:none;text-decoration:underline}
   .stack{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
@@ -216,6 +216,9 @@
 <div class="hero">
   <h2>Vom Modell zum Angebot.</h2>
   <p>Datei laden, Material wählen, Preis erhalten.</p>
+  <div class="stack" style="justify-content:center;margin-top:16px">
+    <a id="btnHelp" class="btn sm" href="mailto:jan@luetje.me?subject=Hilfe%20zur%203D-Druck-Anfrage&amp;body=Hallo%2C%20ich%20brauche%20Hilfe%20bei%20meiner%20Anfrage%3A%0A%0A">Hilfe / Frage stellen</a>
+  </div>
 </div>
 
 <div class="wrap">
@@ -416,7 +419,7 @@ const BACKUP_SECRET = "3b86e61d44de4bb68c2c309b3768d1cd061d4a1ba0d9ff54";
 // siehe NOTIZEN.md "Öffentliche Seite vs. Backend"), teilen sich also KEINEN localStorage
 // mehr — die Werte kommen deshalb per Fetch vom API-Server auf dem Pi, nicht aus dem Browser.
 // Feste Startwerte gelten, bis die Antwort da ist bzw. falls das Backend noch nie gespeichert hat.
-const CALCBASE_DEFAULTS = {pWatt:120,pKwh:0.27,pMachine:1,pSetup:1.5,pMargin:15,pVat:0,bx:256,by:256,bz:256};
+const CALCBASE_DEFAULTS = {pWatt:120,pKwh:0.27,pMachine:1,pSetup:0.5,pMargin:15,pVat:0,bx:256,by:256,bz:256};
 let CALCBASE = {...CALCBASE_DEFAULTS};
 fetch(CALCBASE_API_URL, { headers: { "X-Backup-Secret": BACKUP_SECRET } })
   .then(r => r.ok ? r.json() : null)

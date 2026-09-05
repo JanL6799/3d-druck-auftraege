@@ -775,6 +775,12 @@ await test('Zurücksetzen löscht den gespeicherten Stand und lädt neu', async 
   assert.equal(nachher, null, 'gespeicherter Stand muss nach dem Reload weg sein');
 });
 
+await test('Hilfe-Knopf öffnet eine Mail an Jan', async () => {
+  const href = await page.getAttribute('#btnHelp', 'href');
+  assert.ok(href.startsWith('mailto:jan@luetje.me'), 'muss ein mailto an Jan sein: ' + href);
+  assert.match(href, /subject=/, 'mit Betreff');
+});
+
 await test('Keine JS-Fehler im gesamten Lauf', () => {
   assert.deepEqual(jsErrors, []);
 });
