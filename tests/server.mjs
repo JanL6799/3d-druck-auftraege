@@ -260,6 +260,29 @@ test('Ablehnungstext passt zur Kategorie und erwähnt ohne Bild kein Foto', () =
   assert.match(api.ablehnText('beschreibung', true), /formuliere sie anders/);
 });
 
+/* ---------- Guthaben mitzaehlen ---------- */
+
+test('Preis wird nach Modellfamilie gewählt, Unbekanntes = teuerste Annahme', () => {
+  assert.deepEqual(api.preisFuer('claude-haiku-4-5'), { in:1, out:5 });
+  assert.deepEqual(api.preisFuer('claude-opus-5'),   { in:5, out:25 });
+  assert.deepEqual(api.preisFuer('irgendwas-neues'), { in:5, out:25 });
+});
+
+test('Kosten in Euro aus Token und Rate', () => {
+  // 1 Mio in + 1 Mio out bei Haiku ($1 + $5 = $6), Rate 0.5 -> 3 EUR
+  const eur = api.kostenEur({input_tokens:1_000_000, output_tokens:1_000_000}, 'claude-haiku-4-5', 0.5);
+  assert.equal(+eur.toFixed(4), 3);
+});
+
+test('Cache-Token zählen als Eingabe mit', () => {
+  const eur = api.kostenEur({input_tokens:0, cache_read_input_tokens:1_000_000, output_tokens:0}, 'claude-haiku-4-5', 1);
+  assert.equal(+eur.toFixed(4), 1);   // 1 Mio * $1 * Rate 1
+});
+
+test('Keine Usage -> keine Kosten', () => {
+  assert.equal(api.kostenEur(null, 'claude-haiku-4-5'), 0);
+});
+
 for (const [s, n] of results) console.log(s, n);
 if (results.some(([s]) => s === 'FAIL')) process.exit(1);
 console.log(`\n${results.length} Server-Tests, alle grün.`);

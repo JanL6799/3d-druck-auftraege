@@ -28,7 +28,7 @@ Auftragsliste — öffnet er selbst, wenn eine Anfrage reingekommen ist. Details
 | `dev/foto-moderation-testen.sh` | Testet `/api/model` gegen die Live-Domain mit einem echten Foto — sagt an, ob angenommen oder mit welcher Kategorie abgelehnt. Speichert nichts. |
 | `README.md` | Kurzvorstellung mit Screenshot (`docs/screenshot.png`) |
 | `tests/e2e.mjs` | 45 Playwright-Tests gegen beide Seiten (`page` = index.html, `pageB` = backend.html) |
-| `tests/server.mjs` | 37 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
+| `tests/server.mjs` | 41 Tests der reinen Server-Logik ohne Netz (Rate-Limit, Palette-Prüfung, Schema- und Prompt-Bau) |
 | `.github/workflows/test.yml` | CI: Tests laufen bei jedem Push |
 
 ## Deployment
@@ -714,6 +714,34 @@ liefert sie jetzt mit aus.
   tippt der Kunde seine Adresse ein und findet den Knopf direkt darunter.
 - **STL-Download:** Nach dem Erzeugen erscheint „STL herunterladen" (Blob plus `<a download>`,
   Objekt-URL wird nach dem Klick freigegeben). E2E-Test prüft den Dateinamen.
+
+### Guthaben-Monitoring — `GET/POST /api/credit`
+
+Anthropic liefert **kein Restguthaben per API** (nur Verbrauch/Kosten über die Admin-API).
+Deshalb zählt der Server lokal mit: jeder erfolgreiche Anthropic-Aufruf bucht seine Kosten
+(aus den `usage`-Token, Preis je Modellfamilie in USD, per `ANTHROPIC_EUR_RATE` in EUR) auf
+`/var/backups/druckauftrag/credit.json` — `{start_eur, spent_eur}`.
+
+- `GET /credit` → `{ok, rest_eur, start_eur, spent_eur, schwelle_eur}`. **HTTP 200** solange
+  `rest >= Schwelle` (Default 1 €, per `CREDIT_WARN_EUR`), sonst **HTTP 402**.
+- `POST /credit {"start_eur": N}` setzt das Startguthaben und nullt `spent` — **nach jedem
+  Aufladen aufrufen**, sonst zählt es vom alten Startwert weiter.
+- Unbekannte Modelle werden mit dem teuersten Preis gebucht (nie unterschätzen); Cache-Token
+  zählen als Eingabe. Die Zahl ist eine **Schätzung** (Cache-Rabatte ignoriert, leicht
+  konservativ), kein Kontostand auf den Cent.
+
+**Kuma:** Der Container läuft mit `network_mode: host`, erreicht den Dienst also direkt unter
+`http://127.0.0.1:8181/credit`. HTTP-Monitor mit Header `X-Backup-Secret: <Wert aus
+index.html>`, akzeptierte Codes `200-299` → bei 402 meldet Kuma „down" und schickt die
+Pushover-Default-Benachrichtigung. `/credit` ist **nicht** über nginx öffentlich (kein
+`drucken.luetje.me/api/credit`) — nur lokal für Kuma.
+
+### Weitere Kleinigkeiten (05.09.2026)
+- **Rüsten & Nacharbeit** von 1,50 auf **0,50 €** (`pSetup`) — an drei Stellen: Defaults in
+  `index.html`/`backend.html` und die Live-`calcbase.json` auf dem Pi, aus der die öffentliche
+  Seite den Wert lädt.
+- **Hilfe-Knopf** im Hero: `mailto:jan@luetje.me` mit Betreff. Button-Styling auf `a.btn`
+  erweitert. Kein Backend nötig.
 
 ## Offene Punkte
 

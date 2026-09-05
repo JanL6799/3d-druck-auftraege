@@ -38,6 +38,16 @@ const MAX_BODY_AI       = 64 * 1024;   // Beschreibung + Palette, mehr braucht e
 const AI_PER_IP_HOUR    = 10;
 const AI_PER_DAY        = 200;
 const AI_DESC_MAX       = 1000;
+const EUR_RATE          = +(process.env.ANTHROPIC_EUR_RATE || 0.92);   // USD -> EUR, grob
+const CREDIT_WARN_EUR   = +(process.env.CREDIT_WARN_EUR || 1);         // Warnschwelle
+// Preise in USD je 1 Mio Token (Stand 2026), grob nach Modellfamilie. Deckt Ein-/Ausgabe ab;
+// Cache-Rabatte werden ignoriert — bei diesem Volumen unerheblich (leicht konservativ).
+const PREISE_USD = {
+  "haiku": { in: 1,  out: 5 },
+  "sonnet":{ in: 2,  out: 10 },
+  "opus":  { in: 5,  out: 25 },
+  "fable": { in: 10, out: 50 },
+};
 const MODEL_PER_IP_HOUR = 5;             // Vorgabe: hoechstens 5 Modelle je Nutzer und Stunde
 const MODEL_PER_DAY     = 100;           // globaler Deckel, der Pi rendert nicht unbegrenzt
 const MAX_BODY_IMG      = 12*1024*1024;  // base64 blaeht ~1,33x auf
@@ -286,6 +296,37 @@ function buildRequestBody(description, palette, model = ANTHROPIC_MODEL){
   return body;
 }
 
+/* ---------- Guthaben mitzaehlen ---------- */
+const CREDIT_FILE = path.join(DIR, "credit.json");
+
+function preisFuer(model){
+  const key = Object.keys(PREISE_USD).find(k => new RegExp(k, "i").test(model || ""));
+  return PREISE_USD[key] || PREISE_USD.opus;   // Unbekannt -> teuerste Annahme, nie unterschaetzen
+}
+
+// Kosten dieser einen Antwort in Euro. Reine Funktion, testbar.
+function kostenEur(usage, model, rate = EUR_RATE){
+  if (!usage) return 0;
+  const p = preisFuer(model);
+  const ein  = (usage.input_tokens  || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+  const aus  = usage.output_tokens || 0;
+  const usd = ein/1e6 * p.in + aus/1e6 * p.out;
+  return usd * rate;
+}
+
+function ladeCredit(){
+  try { return JSON.parse(fs.readFileSync(CREDIT_FILE, "utf8")); }
+  catch { return { start_eur: 0, spent_eur: 0 }; }
+}
+
+function bucheSpend(usage, model){
+  // start_eur bleibt, spent_eur waechst. Bei fehlender Datei zaehlt ab 0 — die Warnung
+  // greift dann erst, wenn Jan ein Startguthaben gesetzt hat.
+  const c = ladeCredit();
+  c.spent_eur = +( (c.spent_eur || 0) + kostenEur(usage, model) ).toFixed(6);
+  try { fs.writeFileSync(CREDIT_FILE, JSON.stringify(c)); } catch(e){ console.error("credit.json:", e.message); }
+}
+
 async function callAnthropic(body){
   for (let attempt = 0; attempt < 2; attempt++){
     const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -298,7 +339,11 @@ async function callAnthropic(body){
       },
       body: JSON.stringify(body)
     });
-    if (r.ok) return r.json();
+    if (r.ok){
+      const data = await r.json();
+      try { bucheSpend(data.usage, body.model); } catch(e){ console.error("Spend-Buchung:", e.message); }
+      return data;
+    }
     // 429 = Rate-Limit, 529 = überlastet. Alles andere ist ein echter Fehler, den ein
     // zweiter Versuch nicht heilt.
     // Der Fehlertext geht ins Journal, nicht an den Kunden — sonst stuenden API-Interna
@@ -706,6 +751,31 @@ async function handleModel(req, res){
   }
 }
 
+// Kuma fragt diesen Endpunkt ab: 200 solange Restguthaben >= Schwelle, sonst 402 -> Kuma
+// meldet "down" und schickt die uebliche Benachrichtigung. Auch per Browser lesbar.
+async function handleCredit(req, res){
+  const c = ladeCredit();
+  const rest = +( (c.start_eur || 0) - (c.spent_eur || 0) ).toFixed(4);
+  const ok = rest >= CREDIT_WARN_EUR;
+  res.writeHead(ok ? 200 : 402, {"Content-Type":"application/json"});
+  res.end(JSON.stringify({
+    ok, rest_eur: rest, start_eur: c.start_eur || 0, spent_eur: c.spent_eur || 0,
+    schwelle_eur: CREDIT_WARN_EUR,
+    hinweis: ok ? "Guthaben ok" : "Guthaben unter " + CREDIT_WARN_EUR + " EUR — bitte aufladen und Startguthaben neu setzen."
+  }));
+}
+
+// Startguthaben nach dem Aufladen setzen (spent wird auf 0 zurueckgesetzt).
+async function handleSetCredit(req, res){
+  const body = await readBody(req, 1024);
+  let d; try { d = JSON.parse(body); } catch { res.writeHead(400); res.end("Ungueltiges JSON"); return; }
+  const start = Number(d.start_eur);
+  if (!Number.isFinite(start) || start < 0){ res.writeHead(400); res.end("start_eur fehlt/ungueltig"); return; }
+  fs.writeFileSync(CREDIT_FILE, JSON.stringify({ start_eur: +start.toFixed(4), spent_eur: 0 }));
+  res.writeHead(200, {"Content-Type":"application/json"});
+  res.end(JSON.stringify({ ok:true, start_eur: +start.toFixed(4), spent_eur: 0 }));
+}
+
 const ROUTES = {
   "POST /backup":     handleBackup,
   "POST /send-mail":  handleSendMail,
@@ -713,6 +783,8 @@ const ROUTES = {
   "POST /calcbase":   handlePostCalcbase,
   "POST /scad":       handleScad,
   "POST /model":      handleModel,
+  "GET /credit":      handleCredit,
+  "POST /credit":     handleSetCredit,
 };
 
 const server = http.createServer((req, res) => {
@@ -742,4 +814,4 @@ module.exports = { clampInfill, clientIp, validPalette, rateLimitCheck, resetRat
                    buildSchema, systemPrompt, buildRequestBody,
                    scadSchema, scadSystemPrompt, buildScadRequestBody, sanitizeScad,
                    pruefeBild, moderationSchema, moderationSystemPrompt, buildModerationBody,
-                   modelLimitCheck, ablehnText };
+                   modelLimitCheck, ablehnText, kostenEur, preisFuer };
