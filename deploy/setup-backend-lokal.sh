@@ -92,6 +92,9 @@ server {
     allow 192.168.0.0/16;
     allow 10.0.0.0/8;
     allow 172.16.0.0/12;
+    # Tailscale-Geraete (100.64.0.0/10). Deckt auch Starlinks CGNAT-Netz ab - unkritisch,
+    # von dort fuehrt kein eingehender Weg zum Pi.
+    allow 100.64.0.0/10;
     deny all;
 
     location /api/backup {
